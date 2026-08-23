@@ -19,6 +19,7 @@ companion Node/Express + PostgreSQL backend.
 | REST backend | Node.js + Express + TypeScript + PostgreSQL (Neon), accessed via Dio |
 | Payments | Razorpay (COD / UPI / Stripe / PayPal payment method options) |
 | AI assistant | Google Gemini (via backend `/assistant` route) |
+| Maps & location | [flutter_map](https://pub.dev/packages/flutter_map) (OpenStreetMap) + [geolocator](https://pub.dev/packages/geolocator); reverse/forward geocoding via OSM Nominatim (proxied by the backend) |
 
 > The app is a **hybrid** data platform: some data flows through Firebase and some
 > through the custom REST backend (`server/`) via `dioProvider`.
@@ -46,12 +47,15 @@ server/              # Express + Postgres API (TypeScript)
 ## Features
 
 - **Storefront** — home with hero banners & categories, product listing/detail,
-  search (fuzzy), product comparison, wishlist, cart, multi-step checkout,
-  order confirmation, order list/detail/tracking.
-- **Accounts** — email/password + Google sign-in, OTP, password reset, addresses,
-  profile, settings, notifications.
-- **Admin panel** — dashboard, products (add/edit), orders, customers, inventory,
-  banners, coupons, reports.
+  search (fuzzy), product comparison, wishlist, cart, multi-step checkout with
+  **location-based delivery pricing**, order confirmation, order
+  list/detail/tracking.
+- **Accounts** — email/password + Google sign-in, OTP, password reset, addresses
+  (with **"use my current location"** autofill), profile, settings, notifications.
+- **Admin panel** — dashboard, products (add/edit with multi-image), orders,
+  customers, inventory, banners, coupons, reports, storefront content
+  (promo/hero copy), and **distance-based delivery fees** (map-based shop
+  location, free radius, per-km charges, free-over-amount, third-party courier).
 - **Extras** — Gemini AI assistant, tool-service booking, support tickets, and
   static pages (about, contact, FAQ, privacy, terms).
 - **Platform** — light/dark theme, English/Hindi localization, offline banner.
@@ -76,11 +80,13 @@ Environment/flavor is selected in `lib/core/config/app_config.dart`
 ### Run the backend
 ```bash
 cd server
+cp .env.example .env   # then fill in DATABASE_URL, JWT_SECRET, etc.
 npm install
-npm run db:seed      # seed Postgres
-npm run dev          # tsx watch on PORT (default 5000)
+npm run db:seed        # seed Postgres
+npm run dev            # tsx watch on PORT (default 5000)
 ```
-Backend config lives in `server/.env` (see **Configuration** below).
+Backend config lives in `server/.env` — start from `server/.env.example`
+(see **Configuration** below).
 
 ## Configuration & Secrets
 
@@ -89,9 +95,9 @@ release (they will not process real transactions as-is):
 
 - `lib/core/constants/app_constants.dart` — `razorpayKeyId`, `stripePublishableKey`,
   `paypalClientId`, `gstNumber`, `baseUrl`.
-- `server/.env` — `DATABASE_URL`, `JWT_SECRET`, `GEMINI_API_KEY`.
-  This file is git-ignored; **never commit real credentials**, and rotate any
-  secret that has been shared.
+- `server/.env` — `DATABASE_URL`, `JWT_SECRET`, `GEMINI_API_KEY` (start from
+  `server/.env.example`). This file is git-ignored; **never commit real
+  credentials**, and rotate any secret that has been shared.
 - The Gemini key can also be supplied to the app at build time:
   `flutter run --dart-define=GEMINI_API_KEY=...`
 

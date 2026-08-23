@@ -49,6 +49,9 @@ app.*.map.json
 *.env
 .env.*
 server/.env
+# ...but DO track the placeholder templates
+!.env.example
+!server/.env.example
 
 # Node.js (backend server)
 node_modules/
