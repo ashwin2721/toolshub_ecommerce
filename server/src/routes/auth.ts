@@ -3,7 +3,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { users } from '../db/mongo';
-import { authenticateToken, AuthRequest } from '../middlewares/auth';
+import { authenticateToken, requireAdmin, AuthRequest } from '../middlewares/auth';
 
 const router = Router();
 
@@ -230,6 +230,45 @@ router.post('/forgot-password', async (req, res) => {
       success: true,
       message: 'If an account with that email exists, a reset link has been sent.',
     });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create a new Admin account — admins only (an admin promotes/creates admins).
+router.post('/admins', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+  const { name, email, password, phone } = req.body;
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: 'Name, email, and password are required' });
+  }
+  if (String(password).length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+
+  try {
+    const existing = await users().findOne({ email });
+    if (existing) {
+      return res.status(400).json({ error: 'An account already exists with this email' });
+    }
+
+    const userId = `user-${crypto.randomUUID()}`;
+    const now = new Date();
+    await users().insertOne({
+      _id: userId,
+      id: userId,
+      email,
+      password_hash: bcrypt.hashSync(password, 10),
+      name,
+      phone: phone || null,
+      photo_url: null,
+      role: 'admin',
+      is_email_verified: true,
+      is_blocked: false,
+      addresses: [],
+      created_at: now,
+    });
+
+    res.status(201).json({ id: userId, email, name, role: 'admin', createdAt: now });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

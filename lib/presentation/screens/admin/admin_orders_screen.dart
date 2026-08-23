@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
 import '../../providers/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
 
@@ -224,6 +225,11 @@ class AdminCustomersScreen extends ConsumerWidget {
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showCreateAdminDialog(context, ref),
+        icon: const Icon(Icons.admin_panel_settings_outlined),
+        label: const Text('Add Admin'),
+      ),
       body: RefreshIndicator(
         onRefresh: () => ref.refresh(adminCustomersProvider.future),
         child: customersAsync.when(
@@ -277,6 +283,110 @@ class AdminCustomersScreen extends ConsumerWidget {
               },
             );
           },
+        ),
+      ),
+    );
+  }
+
+  void _showCreateAdminDialog(BuildContext context, WidgetRef ref) {
+    final nameCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final passwordCtrl = TextEditingController();
+    bool saving = false;
+    bool obscure = true;
+
+    showDialog(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.admin_panel_settings_outlined, color: AppColors.primary),
+              SizedBox(width: 8),
+              Text('Create Admin'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'The new account will have full admin access.',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Full Name'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: emailCtrl,
+                decoration: const InputDecoration(labelText: 'Email'),
+                keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: passwordCtrl,
+                obscureText: obscure,
+                decoration: InputDecoration(
+                  labelText: 'Password (min 6 characters)',
+                  suffixIcon: IconButton(
+                    icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                    onPressed: () => setLocal(() => obscure = !obscure),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      if (nameCtrl.text.trim().isEmpty ||
+                          emailCtrl.text.trim().isEmpty ||
+                          passwordCtrl.text.length < 6) {
+                        messenger.showSnackBar(const SnackBar(
+                          content: Text('Enter a name, email, and a 6+ character password'),
+                          backgroundColor: AppColors.error,
+                        ));
+                        return;
+                      }
+                      setLocal(() => saving = true);
+                      try {
+                        await ref.read(dioProvider).post('/auth/admins', data: {
+                          'name': nameCtrl.text.trim(),
+                          'email': emailCtrl.text.trim(),
+                          'password': passwordCtrl.text,
+                        });
+                        ref.invalidate(adminCustomersProvider);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        messenger.showSnackBar(const SnackBar(
+                          content: Text('Admin account created successfully'),
+                          backgroundColor: AppColors.success,
+                        ));
+                      } on DioException catch (e) {
+                        final data = e.response?.data;
+                        final msg = data is Map && data['error'] != null
+                            ? data['error'].toString()
+                            : 'Failed to create admin';
+                        messenger.showSnackBar(SnackBar(content: Text(msg), backgroundColor: AppColors.error));
+                        setLocal(() => saving = false);
+                      } catch (e) {
+                        messenger.showSnackBar(SnackBar(content: Text('Failed: $e'), backgroundColor: AppColors.error));
+                        setLocal(() => saving = false);
+                      }
+                    },
+              child: saving
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Create'),
+            ),
+          ],
         ),
       ),
     );
