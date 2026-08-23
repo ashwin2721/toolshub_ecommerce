@@ -657,8 +657,21 @@ class StoreFooter extends StatelessWidget {
             const SizedBox(height: 24),
             const Divider(color: Colors.white24, height: 1),
             const SizedBox(height: 16),
-            const Text('© 2026 TOOLSHUB Technologies Pvt. Ltd. — Professional Tools & Hardware.',
-                style: TextStyle(color: Colors.white54, fontSize: 12)),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                      '© 2026 TOOLSHUB Technologies Pvt. Ltd. — Professional Tools & Hardware.',
+                      style: TextStyle(color: Colors.white54, fontSize: 12)),
+                ),
+                const SizedBox(width: 12),
+                Text('v1.0.0',
+                    style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.4),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500)),
+              ],
+            ),
           ],
         ),
       ),
