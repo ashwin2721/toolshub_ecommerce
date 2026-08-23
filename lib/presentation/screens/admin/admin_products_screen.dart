@@ -155,7 +155,7 @@ class _AdminProductsScreenState extends ConsumerState<AdminProductsScreen> {
                                       }
                                     }
                                   },
-                                  activeThumbColor: AppColors.primary,
+                                  activeColor: AppColors.primary,
                                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                 ),
                                 PopupMenuButton<String>(

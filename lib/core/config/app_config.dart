@@ -20,7 +20,7 @@ class AppConfig {
       case 'prod':
         return AppConfig(
           appTitle: 'ToolsHub',
-          apiBaseUrl: 'https://api.toolshub.com',
+          apiBaseUrl: 'https://toolshub-ecommerce.onrender.com/api',
           environment: AppEnvironment.prod,
         );
       case 'dev':

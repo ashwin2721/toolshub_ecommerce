@@ -277,7 +277,7 @@ class AdminCustomersScreen extends ConsumerWidget {
                         }
                       }
                     },
-                    activeThumbColor: AppColors.success,
+                    activeColor: AppColors.success,
                   ),
                 );
               },
@@ -536,7 +536,7 @@ class AdminCouponsScreen extends ConsumerWidget {
                         await ref.read(dioProvider).patch('/coupons/${data['id']}', data: {'isActive': v});
                         ref.invalidate(adminCouponsProvider);
                       },
-                      activeThumbColor: AppColors.primary,
+                      activeColor: AppColors.primary,
                     ),
                   ),
                 );
@@ -564,7 +564,7 @@ class AdminCouponsScreen extends ConsumerWidget {
                   textCapitalization: TextCapitalization.characters),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                initialValue: type,
+                value: type,
                 decoration: const InputDecoration(labelText: 'Type'),
                 items: const [
                   DropdownMenuItem(value: 'percentage', child: Text('Percentage (%)')),
@@ -640,7 +640,7 @@ class AdminBannersScreen extends ConsumerWidget {
                         await ref.read(dioProvider).patch('/banners/${data['id']}', data: {'isActive': v});
                         ref.invalidate(adminBannersProvider);
                       },
-                      activeThumbColor: AppColors.primary,
+                      activeColor: AppColors.primary,
                     ),
                   ),
                 );

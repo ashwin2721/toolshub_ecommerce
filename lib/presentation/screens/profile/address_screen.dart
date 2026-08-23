@@ -299,7 +299,7 @@ class _AddressScreenState extends ConsumerState<AddressScreen> {
                       Switch.adaptive(
                         value: isDefault,
                         onChanged: (v) => setSheetState(() => isDefault = v),
-                        activeThumbColor: AppColors.primary,
+                        activeColor: AppColors.primary,
                       ),
                     ],
                   ),
@@ -778,7 +778,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: const Text('Push Notifications'),
               trailing: Switch(
                 value: _pushNotif,
-                activeThumbColor: AppColors.primary,
+                activeColor: AppColors.primary,
                 onChanged: (v) {
                   setState(() => _pushNotif = v);
                   _setPref('notif_push', v);
@@ -790,7 +790,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: const Text('Email Notifications'),
               trailing: Switch(
                 value: _emailNotif,
-                activeThumbColor: AppColors.primary,
+                activeColor: AppColors.primary,
                 onChanged: (v) {
                   setState(() => _emailNotif = v);
                   _setPref('notif_email', v);
@@ -802,7 +802,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: const Text('SMS Notifications'),
               trailing: Switch(
                 value: _smsNotif,
-                activeThumbColor: AppColors.primary,
+                activeColor: AppColors.primary,
                 onChanged: (v) {
                   setState(() => _smsNotif = v);
                   _setPref('notif_sms', v);

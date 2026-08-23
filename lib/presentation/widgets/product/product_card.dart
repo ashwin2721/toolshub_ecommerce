@@ -67,8 +67,8 @@ class _HoverLiftState extends State<_HoverLift> {
         curve: Curves.easeOut,
         transform: _isHovered
             ? (Matrix4.identity()
-              ..translateByDouble(0, -5, 0, 1)
-              ..scaleByDouble(1.02, 1.02, 1.02, 1))
+              ..translate(0.0, -5.0, 0.0)
+              ..scale(1.02, 1.02, 1.02))
             : Matrix4.identity(),
         child: widget.child,
       ),

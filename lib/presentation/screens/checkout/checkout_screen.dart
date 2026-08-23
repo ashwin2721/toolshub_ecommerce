@@ -675,7 +675,7 @@ class _Step2Address extends StatelessWidget {
                       Switch.adaptive(
                         value: saveToProfile,
                         onChanged: onSaveToProfileChanged,
-                        activeThumbColor: AppColors.primary,
+                        activeColor: AppColors.primary,
                       ),
                     ],
                   ),
@@ -945,24 +945,23 @@ class _Step4Payment extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RadioGroup<String>(
-      groupValue: selected,
-      onChanged: (v) => onChanged(v!),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Payment Method',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-          const SizedBox(height: 16),
-          ..._methods.map((m) => RadioListTile<String>(
-                value: m.$1,
-                title: Text(m.$2),
-                secondary: Icon(m.$3, color: AppColors.primary),
-                activeColor: AppColors.primary,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              )),
-          if (selected == AppConstants.paymentCod)
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Payment Method',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+        const SizedBox(height: 16),
+        ..._methods.map((m) => RadioListTile<String>(
+              value: m.$1,
+              groupValue: selected,
+              onChanged: (v) => onChanged(v!),
+              title: Text(m.$2),
+              secondary: Icon(m.$3, color: AppColors.primary),
+              activeColor: AppColors.primary,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            )),
+        if (selected == AppConstants.paymentCod)
             Container(
               margin: const EdgeInsets.only(top: 8),
               padding: const EdgeInsets.all(12),
@@ -975,8 +974,7 @@ class _Step4Payment extends StatelessWidget {
                 style: TextStyle(fontSize: 13),
               ),
             ),
-        ],
-      ),
+      ],
     );
   }
 }

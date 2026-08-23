@@ -6,7 +6,7 @@ class Breakpoints {
 
   static const double mobile = 640;
   static const double tablet = 1024;
-  static const double maxContentWidth = 1240;
+  static const double maxContentWidth = double.infinity;
 }
 
 extension ResponsiveContext on BuildContext {
