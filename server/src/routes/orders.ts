@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import crypto from 'crypto';
-import pool, { query } from '../db';
+import { orders, products, users } from '../db/mongo';
 import { authenticateToken, requireAdmin, AuthRequest } from '../middlewares/auth';
 import { computeDelivery, deliverySettings } from '../services/delivery';
 
@@ -11,7 +11,30 @@ const router = Router();
 // by the admin-managed distance engine (see ../services/delivery).
 const GST_RATE = 0.18;
 
-// Place a New Order (ACID compliant transaction)
+// Map an order document (items embedded) to the camelCase API shape.
+const mapOrder = (o: any) => ({
+  id: o.id,
+  userId: o.user_id,
+  totalAmount: Number(o.total_amount),
+  status: o.status,
+  paymentStatus: o.payment_status,
+  paymentMethod: o.payment_method,
+  shippingAddress: o.shipping_address,
+  createdAt: o.created_at,
+  updatedAt: o.updated_at,
+  items: (o.items || []).map((item: any) => ({
+    id: item.id,
+    productId: item.product_id,
+    name: item.name,
+    price: Number(item.price),
+    quantity: item.quantity,
+    imageUrl: item.image_url,
+  })),
+});
+
+// Place a New Order. Inventory is decremented with conditional updates and a
+// compensating restock on failure (keeps stock correct without needing a
+// replica-set transaction, so it works on Atlas and the in-memory store alike).
 router.post('/orders', authenticateToken, async (req: AuthRequest, res) => {
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
@@ -20,64 +43,35 @@ router.post('/orders', authenticateToken, async (req: AuthRequest, res) => {
     return res.status(400).json({ error: 'Missing required order details' });
   }
 
-  // Whether the client requested express delivery. Client-supplied item prices and
-  // totalAmount are intentionally ignored and recomputed authoritatively below.
   const isExpress = req.body.shippingMethod === 'express' || req.body.express === true;
+  const orderId = `order-${crypto.randomUUID()}`;
 
-  const client = await pool.connect();
+  // Track decrements so we can roll them back if a later step fails.
+  const decremented: { productId: string; quantity: number }[] = [];
+
   try {
-    await client.query('BEGIN');
-
-    const orderId = `order-${crypto.randomUUID()}`;
-
-    // 1. Insert Order record first (to avoid foreign key constraint issues in order_items).
-    //    total_amount is a placeholder and is recomputed authoritatively once line items
-    //    are priced from the products table below.
-    await client.query(
-      `INSERT INTO orders (id, user_id, total_amount, payment_method, shipping_address, status, payment_status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [orderId, req.user.id, 0, paymentMethod, JSON.stringify(shippingAddress), 'pending', 'pending']
-    );
-
-    // 2. Process items, lock stock rows, verify inventory, decrement stock, insert order items,
-    //    and accumulate the authoritative subtotal from DB prices.
+    // 1. Price line items from DB and validate stock availability (read-only).
     let subtotal = 0;
+    const orderItems: any[] = [];
     for (const item of items) {
-      const prodRes = await client.query(
-        'SELECT stock_quantity, price, name FROM products WHERE id = $1 FOR UPDATE',
-        [item.productId]
-      );
-
-      if (prodRes.rows.length === 0) {
-        throw new Error(`Product not found: ${item.productId}`);
-      }
-
-      const product = prodRes.rows[0];
+      const product = await products().findOne({ _id: item.productId });
+      if (!product) throw new Error(`Product not found: ${item.productId}`);
       if (product.stock_quantity < item.quantity) {
         throw new Error(`Insufficient stock for ${product.name}. Available: ${product.stock_quantity}, Requested: ${item.quantity}`);
       }
-
-      // Authoritative unit price from the products table (client-supplied price ignored).
-      const unitPrice = parseFloat(product.price);
+      const unitPrice = Number(product.price);
       subtotal += unitPrice * item.quantity;
-
-      // Decrement stock
-      await client.query(
-        'UPDATE products SET stock_quantity = stock_quantity - $1 WHERE id = $2',
-        [item.quantity, item.productId]
-      );
-
-      // Insert Order Item record (price sourced from DB, not the client)
-      await client.query(
-        `INSERT INTO order_items (order_id, product_id, name, price, quantity, image_url)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [orderId, item.productId, item.name || product.name, unitPrice, item.quantity, item.imageUrl || null]
-      );
+      orderItems.push({
+        id: `oi-${crypto.randomUUID()}`,
+        product_id: item.productId,
+        name: item.name || product.name,
+        price: unitPrice,
+        quantity: item.quantity,
+        image_url: item.imageUrl || null,
+      });
     }
 
-    // 3. Authoritative total recompute. Client totalAmount is ignored entirely.
-    //    Delivery is priced by distance from the shop to the shipping address
-    //    using the admin-configured rules (free radius, per-km, third-party…).
+    // 2. Authoritative delivery + totals (distance engine; client amount ignored).
     const addrStr = [
       shippingAddress.street, shippingAddress.city,
       shippingAddress.state, shippingAddress.pinCode, 'India',
@@ -93,97 +87,67 @@ router.post('/orders', authenticateToken, async (req: AuthRequest, res) => {
     }
     const shipping = isExpress ? deliverySettings.expressSurcharge : quote.deliveryFee;
     const gst = subtotal * GST_RATE;
-    // TODO: server-side coupon validation is not implemented yet, so any client-supplied
-    // discount is ignored here to prevent underpayment.
     const discount = 0;
     const total = subtotal + shipping + gst - discount;
 
-    await client.query(
-      'UPDATE orders SET total_amount = $1 WHERE id = $2',
-      [total, orderId]
-    );
+    // 3. Decrement inventory with a guard against concurrent oversell.
+    for (const item of items) {
+      const upd = await products().updateOne(
+        { _id: item.productId, stock_quantity: { $gte: item.quantity } },
+        { $inc: { stock_quantity: -item.quantity } }
+      );
+      if (upd.modifiedCount !== 1) {
+        throw new Error(`Insufficient stock for product ${item.productId}`);
+      }
+      decremented.push({ productId: item.productId, quantity: item.quantity });
+    }
 
-    await client.query('COMMIT');
+    // 4. Persist the order (items embedded).
+    const now = new Date();
+    await orders().insertOne({
+      _id: orderId,
+      id: orderId,
+      user_id: req.user.id,
+      total_amount: total,
+      status: 'pending',
+      payment_status: 'pending',
+      payment_method: paymentMethod,
+      shipping_address: shippingAddress,
+      items: orderItems,
+      created_at: now,
+      updated_at: now,
+    });
+
     res.status(201).json({ id: orderId, message: 'Order placed successfully' });
   } catch (err: any) {
+    // Compensating restock for any decrements already applied.
+    for (const d of decremented) {
+      try {
+        await products().updateOne({ _id: d.productId }, { $inc: { stock_quantity: d.quantity } });
+      } catch { /* best-effort */ }
+    }
     console.error('Order creation error:', err);
-    await client.query('ROLLBACK');
     res.status(400).json({ error: err.message });
-  } finally {
-    client.release();
   }
 });
 
 // Get User Orders History
 router.get('/orders', authenticateToken, async (req: AuthRequest, res) => {
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
-
   try {
-    const ordersRes = await query(
-      'SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC',
-      [req.user.id]
-    );
-    
-    const orders = [];
-    for (const order of ordersRes.rows) {
-      const itemsRes = await query('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
-      orders.push({
-        id: order.id,
-        userId: order.user_id,
-        totalAmount: parseFloat(order.total_amount),
-        status: order.status,
-        paymentStatus: order.payment_status,
-        paymentMethod: order.payment_method,
-        shippingAddress: order.shipping_address,
-        createdAt: order.created_at,
-        updatedAt: order.updated_at,
-        items: itemsRes.rows.map(item => ({
-          id: item.id,
-          productId: item.product_id,
-          name: item.name,
-          price: parseFloat(item.price),
-          quantity: item.quantity,
-          imageUrl: item.image_url
-        }))
-      });
-    }
-
-    res.json(orders);
+    const rows = await orders().find({ user_id: req.user.id }).sort({ created_at: -1 }).toArray();
+    res.json(rows.map(mapOrder));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // Get All System Orders (Admin only)
-// NOTE: This MUST be registered before GET '/orders/:id', otherwise ':id' would
-// match the literal "admin" and shadow this route.
+// NOTE: MUST be registered before GET '/orders/:id' so ':id' doesn't match "admin".
 router.get('/orders/admin', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
   try {
-    const ordersRes = await query('SELECT * FROM orders ORDER BY created_at DESC');
-    const orders = [];
-    for (const order of ordersRes.rows) {
-      const itemsRes = await query('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
-      orders.push({
-        id: order.id,
-        userId: order.user_id,
-        totalAmount: parseFloat(order.total_amount),
-        status: order.status,
-        paymentStatus: order.payment_status,
-        paymentMethod: order.payment_method,
-        shippingAddress: order.shipping_address,
-        createdAt: order.created_at,
-        updatedAt: order.updated_at,
-        items: itemsRes.rows.map(item => ({
-          id: item.id,
-          productId: item.product_id,
-          name: item.name,
-          price: parseFloat(item.price),
-          quantity: item.quantity,
-          imageUrl: item.image_url
-        }))
-      });
-    }
-    res.json(orders);
+    const rows = await orders().find({}).sort({ created_at: -1 }).toArray();
+    res.json(rows.map(mapOrder));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -192,125 +156,46 @@ router.get('/orders/admin', authenticateToken, requireAdmin, async (req: AuthReq
 // Get Single Order Details
 router.get('/orders/:id', authenticateToken, async (req: AuthRequest, res) => {
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
-
-  const { id } = req.params;
-
   try {
-    const orderRes = await query('SELECT * FROM orders WHERE id = $1', [id]);
-    if (orderRes.rows.length === 0) {
+    const order = await orders().findOne({ _id: req.params.id });
+    if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
-
-    const order = orderRes.rows[0];
-
-    // Ensure user owns the order, or is an admin
     if (order.user_id !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Forbidden' });
     }
-
-    const itemsRes = await query('SELECT * FROM order_items WHERE order_id = $1', [id]);
-
-    res.json({
-      id: order.id,
-      userId: order.user_id,
-      totalAmount: parseFloat(order.total_amount),
-      status: order.status,
-      paymentStatus: order.payment_status,
-      paymentMethod: order.payment_method,
-      shippingAddress: order.shipping_address,
-      createdAt: order.created_at,
-      updatedAt: order.updated_at,
-      items: itemsRes.rows.map(item => ({
-        id: item.id,
-        productId: item.product_id,
-        name: item.name,
-        price: parseFloat(item.price),
-        quantity: item.quantity,
-        imageUrl: item.image_url
-      }))
-    });
+    res.json(mapOrder(order));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Cancel Order (owner only; ACID transaction with inventory restock)
+// Cancel Order (owner only; restocks inventory)
 router.post('/orders/:id/cancel', authenticateToken, async (req: AuthRequest, res) => {
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
-
-  const { id } = req.params;
-
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
+    const order = await orders().findOne({ _id: req.params.id });
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.user_id !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
 
-    const orderRes = await client.query('SELECT * FROM orders WHERE id = $1 FOR UPDATE', [id]);
-    if (orderRes.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Order not found' });
-    }
-
-    const order = orderRes.rows[0];
-
-    // Ensure the order belongs to the requesting user.
-    if (order.user_id !== req.user.id) {
-      await client.query('ROLLBACK');
-      return res.status(403).json({ error: 'Forbidden' });
-    }
-
-    // Only pending/confirmed/processing orders may be cancelled.
     const cancellable = ['pending', 'confirmed', 'processing'];
     if (!cancellable.includes(order.status)) {
-      await client.query('ROLLBACK');
       return res.status(400).json({ error: `Order cannot be cancelled while it is ${order.status}` });
     }
 
-    const itemsRes = await client.query('SELECT * FROM order_items WHERE order_id = $1', [id]);
-
-    // Restock inventory for each line item (product_id may be null if the product was removed).
-    for (const item of itemsRes.rows) {
+    // Restock each line item (product_id may be null if the product was removed).
+    for (const item of order.items || []) {
       if (item.product_id) {
-        await client.query(
-          'UPDATE products SET stock_quantity = stock_quantity + $1 WHERE id = $2',
-          [item.quantity, item.product_id]
-        );
+        await products().updateOne({ _id: item.product_id }, { $inc: { stock_quantity: item.quantity } });
       }
     }
 
-    const updatedRes = await client.query(
-      "UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *",
-      [id]
-    );
+    const now = new Date();
+    await orders().updateOne({ _id: req.params.id }, { $set: { status: 'cancelled', updated_at: now } });
 
-    await client.query('COMMIT');
-
-    const updated = updatedRes.rows[0];
-    res.json({
-      order: {
-        id: updated.id,
-        userId: updated.user_id,
-        totalAmount: parseFloat(updated.total_amount),
-        status: updated.status,
-        paymentStatus: updated.payment_status,
-        paymentMethod: updated.payment_method,
-        shippingAddress: updated.shipping_address,
-        createdAt: updated.created_at,
-        updatedAt: updated.updated_at,
-        items: itemsRes.rows.map(item => ({
-          id: item.id,
-          productId: item.product_id,
-          name: item.name,
-          price: parseFloat(item.price),
-          quantity: item.quantity,
-          imageUrl: item.image_url
-        }))
-      }
-    });
+    res.json({ order: mapOrder({ ...order, status: 'cancelled', updated_at: now }) });
   } catch (err: any) {
-    await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
-  } finally {
-    client.release();
   }
 });
 
@@ -318,22 +203,12 @@ router.post('/orders/:id/cancel', authenticateToken, async (req: AuthRequest, re
 router.put('/orders/admin/:id/status', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
   const { id } = req.params;
   const { status } = req.body;
-
-  if (!status) {
-    return res.status(400).json({ error: 'Status is required' });
-  }
+  if (!status) return res.status(400).json({ error: 'Status is required' });
 
   try {
-    const existing = await query('SELECT id FROM orders WHERE id = $1', [id]);
-    if (existing.rows.length === 0) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
-
-    await query(
-      'UPDATE orders SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-      [status, id]
-    );
-
+    const existing = await orders().findOne({ _id: id });
+    if (!existing) return res.status(404).json({ error: 'Order not found' });
+    await orders().updateOne({ _id: id }, { $set: { status, updated_at: new Date() } });
     res.json({ message: 'Order status updated successfully' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -343,41 +218,28 @@ router.put('/orders/admin/:id/status', authenticateToken, requireAdmin, async (r
 // Get Admin Dashboard Stats (Admin only)
 router.get('/admin/stats', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
   try {
-    // Compute stats from the raw rows in JS rather than SQL aggregates, so this
-    // works against both real Postgres and the in-memory mock DB (which does not
-    // support COUNT()/SUM()/JOIN and would otherwise return empty rows -> crash).
-    const ordersRes = await query('SELECT * FROM orders ORDER BY created_at DESC');
-    const orders: any[] = ordersRes.rows || [];
-
-    const usersRes = await query(
-      "SELECT id, name FROM users WHERE role = 'customer' ORDER BY created_at DESC");
-    const customers: any[] = usersRes.rows || [];
+    const allOrders = await orders().find({}).sort({ created_at: -1 }).toArray();
+    const customers = await users().find({ role: 'customer' }).sort({ created_at: -1 }).toArray();
     const nameById: Record<string, string> = {};
     for (const u of customers) nameById[u.id] = u.name;
+    const activeProducts = await products().find({ is_active: true }).toArray();
 
-    const productsRes = await query(
-      'SELECT id FROM products WHERE is_active = true ORDER BY created_at DESC LIMIT $1',
-      [100000]);
-    const products: any[] = productsRes.rows || [];
-
-    const totalRevenue = orders
+    const totalRevenue = allOrders
       .filter((o) => o.status !== 'cancelled')
-      .reduce((sum, o) => sum + (parseFloat(o.total_amount) || 0), 0);
+      .reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
 
     res.json({
-      totalOrders: orders.length,
+      totalOrders: allOrders.length,
       totalRevenue,
       totalCustomers: customers.length,
-      totalProducts: products.length,
-      recentOrders: orders.slice(0, 5).map((row) => {
+      totalProducts: activeProducts.length,
+      recentOrders: allOrders.slice(0, 5).map((row) => {
         const id = String(row.id ?? '');
         return {
           id,
-          orderNumber: id.length > 8
-              ? `TH-${id.substring(id.length - 8).toUpperCase()}`
-              : id.toUpperCase(),
+          orderNumber: id.length > 8 ? `TH-${id.substring(id.length - 8).toUpperCase()}` : id.toUpperCase(),
           userName: nameById[row.user_id] || 'Guest',
-          total: parseFloat(row.total_amount) || 0,
+          total: Number(row.total_amount) || 0,
           status: row.status,
         };
       }),
@@ -390,10 +252,17 @@ router.get('/admin/stats', authenticateToken, requireAdmin, async (req: AuthRequ
 // Get All Customers (Admin only)
 router.get('/admin/customers', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
   try {
-    const result = await query(
-      "SELECT id, email, name, phone, photo_url, role, is_blocked as \"isBlocked\", created_at as \"createdAt\" FROM users WHERE role = 'customer' ORDER BY created_at DESC"
-    );
-    res.json(result.rows);
+    const rows = await users().find({ role: 'customer' }).sort({ created_at: -1 }).toArray();
+    res.json(rows.map((u) => ({
+      id: u.id,
+      email: u.email,
+      name: u.name,
+      phone: u.phone,
+      photoUrl: u.photo_url,
+      role: u.role,
+      isBlocked: u.is_blocked,
+      createdAt: u.created_at,
+    })));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -404,7 +273,7 @@ router.put('/admin/customers/:id/block', authenticateToken, requireAdmin, async 
   const { id } = req.params;
   const { isBlocked } = req.body;
   try {
-    await query('UPDATE users SET is_blocked = $1 WHERE id = $2', [isBlocked, id]);
+    await users().updateOne({ _id: id }, { $set: { is_blocked: isBlocked } });
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

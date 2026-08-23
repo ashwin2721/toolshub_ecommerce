@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../domain/entities/user_entity.dart';
 
 class UserModel extends UserEntity {
@@ -20,38 +19,6 @@ class UserModel extends UserEntity {
     super.lastLoginAt,
   });
 
-  factory UserModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return UserModel(
-      id: doc.id,
-      email: data['email'] ?? '',
-      name: data['name'] ?? '',
-      phone: data['phone'],
-      photoUrl: data['photoUrl'],
-      role: data['role'] ?? 'customer',
-      isEmailVerified: data['isEmailVerified'] ?? false,
-      isPhoneVerified: data['isPhoneVerified'] ?? false,
-      isBlocked: data['isBlocked'] ?? false,
-      addresses: (data['addresses'] as List<dynamic>?)
-              ?.map((a) => AddressModel.fromMap(a as Map<String, dynamic>))
-              .toList() ??
-          [],
-      defaultAddressId: data['defaultAddressId'],
-      fcmToken: data['fcmToken'],
-      languageCode: data['languageCode'] ?? 'en',
-      createdAt: data['createdAt'] is Timestamp
-          ? (data['createdAt'] as Timestamp).toDate()
-          : data['createdAt'] is String
-              ? DateTime.tryParse(data['createdAt']) ?? DateTime.now()
-              : DateTime.now(),
-      lastLoginAt: data['lastLoginAt'] is Timestamp
-          ? (data['lastLoginAt'] as Timestamp).toDate()
-          : data['lastLoginAt'] is String
-              ? DateTime.tryParse(data['lastLoginAt'])
-              : null,
-    );
-  }
-
   factory UserModel.fromMap(Map<String, dynamic> data, String id) {
     return UserModel(
       id: id,
@@ -70,16 +37,12 @@ class UserModel extends UserEntity {
       defaultAddressId: data['defaultAddressId'],
       fcmToken: data['fcmToken'],
       languageCode: data['languageCode'] ?? 'en',
-      createdAt: data['createdAt'] is Timestamp
-          ? (data['createdAt'] as Timestamp).toDate()
-          : data['createdAt'] is String
-              ? DateTime.tryParse(data['createdAt']) ?? DateTime.now()
-              : DateTime.now(),
-      lastLoginAt: data['lastLoginAt'] is Timestamp
-          ? (data['lastLoginAt'] as Timestamp).toDate()
-          : data['lastLoginAt'] is String
-              ? DateTime.tryParse(data['lastLoginAt'])
-              : null,
+      createdAt: data['createdAt'] is String
+          ? DateTime.tryParse(data['createdAt']) ?? DateTime.now()
+          : DateTime.now(),
+      lastLoginAt: data['lastLoginAt'] is String
+          ? DateTime.tryParse(data['lastLoginAt'])
+          : null,
     );
   }
 
@@ -98,9 +61,8 @@ class UserModel extends UserEntity {
         'defaultAddressId': defaultAddressId,
         'fcmToken': fcmToken,
         'languageCode': languageCode,
-        'createdAt': Timestamp.fromDate(createdAt),
-        'lastLoginAt':
-            lastLoginAt != null ? Timestamp.fromDate(lastLoginAt!) : null,
+        'createdAt': createdAt.toIso8601String(),
+        'lastLoginAt': lastLoginAt?.toIso8601String(),
       };
 }
 

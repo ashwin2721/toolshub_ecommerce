@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../domain/entities/product_entity.dart';
 
 class ProductModel extends ProductEntity {
@@ -79,14 +78,10 @@ class ProductModel extends ProductEntity {
       isNewArrival: data['isNewArrival'] ?? false,
       isBestSeller: data['isBestSeller'] ?? false,
       createdAt: data['createdAt'] != null
-          ? (data['createdAt'] is Timestamp 
-              ? (data['createdAt'] as Timestamp).toDate() 
-              : DateTime.tryParse(data['createdAt'].toString()) ?? DateTime.now())
+          ? (DateTime.tryParse(data['createdAt'].toString()) ?? DateTime.now())
           : DateTime.now(),
       updatedAt: data['updatedAt'] != null
-          ? (data['updatedAt'] is Timestamp 
-              ? (data['updatedAt'] as Timestamp).toDate() 
-              : DateTime.tryParse(data['updatedAt'].toString()))
+          ? DateTime.tryParse(data['updatedAt'].toString())
           : null,
       attributes: data['attributes'] as Map<String, dynamic>?,
       tags: data['tags'] != null ? List<String>.from(data['tags']) : null,
@@ -95,63 +90,6 @@ class ProductModel extends ProductEntity {
           : null,
       bulkPricing: data['bulkPricing'] as Map<String, dynamic>?,
     );
-  }
-
-  factory ProductModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return ProductModel(
-      id: doc.id,
-      sku: data['sku'] ?? '',
-      barcode: data['barcode'],
-      name: data['name'] ?? '',
-      slug: data['slug'] ?? '',
-      description: data['description'] ?? '',
-      specifications: data['specifications'],
-      features: List<String>.from(data['features'] ?? []),
-      brandId: data['brandId'] ?? '',
-      brandName: data['brandName'] ?? '',
-      categoryId: data['categoryId'] ?? '',
-      categoryName: data['categoryName'] ?? '',
-      subcategoryId: data['subcategoryId'],
-      subcategoryName: data['subcategoryName'],
-      imageUrls: List<String>.from(data['imageUrls'] ?? []),
-      videoUrls: List<String>.from(data['videoUrls'] ?? []),
-      price: (data['price'] as num?)?.toDouble() ?? 0,
-      discountPrice: (data['discountPrice'] as num?)?.toDouble(),
-      stockQuantity: (data['stockQuantity'] as num?)?.toInt() ?? 0,
-      warrantyInfo: data['warrantyInfo'],
-      weight: (data['weight'] as num?)?.toDouble(),
-      dimensions: data['dimensions'] != null
-          ? _dimensionsFromMap(data['dimensions'] as Map<String, dynamic>)
-          : null,
-      shippingInfo: data['shippingInfo'] != null
-          ? _shippingFromMap(data['shippingInfo'] as Map<String, dynamic>)
-          : null,
-      rating: (data['rating'] as num?)?.toDouble() ?? 0,
-      reviewCount: (data['reviewCount'] as num?)?.toInt() ?? 0,
-      isActive: data['isActive'] ?? true,
-      isFeatured: data['isFeatured'] ?? false,
-      isFlashSale: data['isFlashSale'] ?? false,
-      isNewArrival: data['isNewArrival'] ?? false,
-      isBestSeller: data['isBestSeller'] ?? false,
-      createdAt: data['createdAt'] is Timestamp
-          ? (data['createdAt'] as Timestamp).toDate()
-          : data['createdAt'] is String
-              ? DateTime.tryParse(data['createdAt']) ?? DateTime.now()
-              : DateTime.now(),
-      updatedAt: data['updatedAt'] is Timestamp
-          ? (data['updatedAt'] as Timestamp).toDate()
-          : data['updatedAt'] is String
-              ? DateTime.tryParse(data['updatedAt'])
-              : null,
-      attributes: data['attributes'] as Map<String, dynamic>?,
-      tags: data['tags'] != null ? List<String>.from(data['tags']) : null,
-      compatibleProductIds: data['compatibleProductIds'] != null
-          ? List<String>.from(data['compatibleProductIds'])
-          : null,
-      bulkPricing: data['bulkPricing'] as Map<String, dynamic>?,
-    );
-
   }
 
   Map<String, dynamic> toMap() => {
@@ -198,8 +136,8 @@ class ProductModel extends ProductEntity {
         'isFlashSale': isFlashSale,
         'isNewArrival': isNewArrival,
         'isBestSeller': isBestSeller,
-        'createdAt': Timestamp.fromDate(createdAt),
-        'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
+        'createdAt': createdAt.toIso8601String(),
+        'updatedAt': updatedAt?.toIso8601String(),
         'attributes': attributes,
         'tags': tags,
         'compatibleProductIds': compatibleProductIds,

@@ -18,7 +18,7 @@ import {
   computeDelivery,
   forwardGeocode,
 } from './services/delivery';
-import pool from './db';
+import { connectDB, ping, supportTickets, isMemoryMode } from './db/mongo';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -55,23 +55,16 @@ app.post('/api/support-tickets', async (req, res) => {
   const ticketId = `ticket-${crypto.randomUUID()}`;
 
   try {
-    // Best-effort persistence: the table is created lazily so no schema migration
-    // is required, and the mock DB layer tolerates these statements as no-ops.
-    await pool.query(
-      `CREATE TABLE IF NOT EXISTS support_tickets (
-        id VARCHAR(255) PRIMARY KEY,
-        subject VARCHAR(255) NOT NULL,
-        message TEXT NOT NULL,
-        category VARCHAR(100),
-        status VARCHAR(50) DEFAULT 'open',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )`
-    );
-    await pool.query(
-      `INSERT INTO support_tickets (id, subject, message, category)
-       VALUES ($1, $2, $3, $4)`,
-      [ticketId, subject, message, category || null]
-    );
+    // Best-effort persistence into the support_tickets collection.
+    await supportTickets().insertOne({
+      _id: ticketId,
+      id: ticketId,
+      subject,
+      message,
+      category: category || null,
+      status: 'open',
+      created_at: new Date(),
+    });
   } catch (err: any) {
     // Persistence is best-effort; still return a real generated id per contract.
     console.warn(`Failed to persist support ticket ${ticketId}: ${err.message}`);
@@ -197,17 +190,22 @@ app.get('/api/delivery-quote', async (req, res) => {
 // Health check endpoint
 app.get('/health', async (req, res) => {
   try {
-    await pool.query('SELECT 1');
-    res.json({ status: 'UP', database: 'CONNECTED' });
+    await ping();
+    res.json({ status: 'UP', database: isMemoryMode() ? 'IN-MEMORY' : 'CONNECTED' });
   } catch (err: any) {
     res.status(500).json({ status: 'DOWN', error: err.message });
   }
 });
 
-// Start listening
-app.listen(PORT, () => {
-  console.log(`=========================================`);
-  console.log(`ToolsHub Backend API Server running on port ${PORT}`);
-  console.log(`URL: http://localhost:${PORT}`);
-  console.log(`=========================================`);
-});
+// Connect to MongoDB (or the in-memory fallback), seed if empty, then listen.
+connectDB()
+  .catch((err) => console.error('Database initialization error:', err))
+  .finally(() => {
+    app.listen(PORT, () => {
+      console.log(`=========================================`);
+      console.log(`ToolsHub Backend API Server running on port ${PORT}`);
+      console.log(`URL: http://localhost:${PORT}`);
+      console.log(`Database: ${isMemoryMode() ? 'IN-MEMORY (set MONGODB_URI for MongoDB)' : 'MongoDB'}`);
+      console.log(`=========================================`);
+    });
+  });

@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../providers/auth_provider.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 
 final adminOrdersProvider = FutureProvider<List<dynamic>>((ref) async {
@@ -20,6 +18,18 @@ final adminCustomersProvider = FutureProvider<List<dynamic>>((ref) async {
 final adminInventoryProvider = FutureProvider<List<dynamic>>((ref) async {
   final dio = ref.watch(dioProvider);
   final response = await dio.get('/products');
+  return response.data as List<dynamic>;
+});
+
+final adminCouponsProvider = FutureProvider.autoDispose<List<dynamic>>((ref) async {
+  final dio = ref.watch(dioProvider);
+  final response = await dio.get('/coupons');
+  return response.data as List<dynamic>;
+});
+
+final adminBannersProvider = FutureProvider.autoDispose<List<dynamic>>((ref) async {
+  final dio = ref.watch(dioProvider);
+  final response = await dio.get('/banners/admin');
   return response.data as List<dynamic>;
 });
 
@@ -379,48 +389,56 @@ class _InventoryStat extends StatelessWidget {
 }
 
 // ── Admin Coupons Screen ───────────────────────────────────────────────────────
-class AdminCouponsScreen extends StatelessWidget {
+class AdminCouponsScreen extends ConsumerWidget {
   const AdminCouponsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final couponsAsync = ref.watch(adminCouponsProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Coupons'), automaticallyImplyLeading: false),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddCouponDialog(context),
+        onPressed: () => _showAddCouponDialog(context, ref),
         icon: const Icon(Icons.add),
         label: const Text('Add Coupon'),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection(AppConstants.couponsCollection).snapshots(),
-        builder: (context, snapshot) {
-          final docs = snapshot.data?.docs ?? [];
+      body: couponsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Failed to load coupons: $e')),
+        data: (docs) {
           if (docs.isEmpty) return const Center(child: Text('No coupons yet'));
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: docs.length,
-            itemBuilder: (_, i) {
-              final data = docs[i].data() as Map<String, dynamic>;
-              return Card(
-                child: ListTile(
-                  leading: const Icon(Icons.local_offer_outlined, color: AppColors.primary),
-                  title: Text(data['code'] ?? '', style: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: 1)),
-                  subtitle: Text('${data['type']} • ${data['value']}${data['type'] == 'percentage' ? '%' : '₹'} off'),
-                  trailing: Switch(
-                    value: data['isActive'] ?? false,
-                    onChanged: (v) => FirebaseFirestore.instance.collection(AppConstants.couponsCollection).doc(docs[i].id).update({'isActive': v}),
-                    activeThumbColor: AppColors.primary,
+          return RefreshIndicator(
+            onRefresh: () async => ref.invalidate(adminCouponsProvider),
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: docs.length,
+              itemBuilder: (_, i) {
+                final data = docs[i] as Map<String, dynamic>;
+                final type = data['type'] ?? 'percentage';
+                return Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.local_offer_outlined, color: AppColors.primary),
+                    title: Text(data['code'] ?? '', style: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: 1)),
+                    subtitle: Text('$type • ${data['value']}${type == 'percentage' ? '%' : '₹'} off'),
+                    trailing: Switch(
+                      value: data['isActive'] ?? false,
+                      onChanged: (v) async {
+                        await ref.read(dioProvider).patch('/coupons/${data['id']}', data: {'isActive': v});
+                        ref.invalidate(adminCouponsProvider);
+                      },
+                      activeThumbColor: AppColors.primary,
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           );
         },
       ),
     );
   }
 
-  void _showAddCouponDialog(BuildContext context) {
+  void _showAddCouponDialog(BuildContext context, WidgetRef ref) {
     final codeCtrl = TextEditingController();
     final valueCtrl = TextEditingController();
     String type = 'percentage';
@@ -453,16 +471,14 @@ class AdminCouponsScreen extends StatelessWidget {
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             ElevatedButton(
-              onPressed: () {
-                FirebaseFirestore.instance.collection(AppConstants.couponsCollection).add({
+              onPressed: () async {
+                await ref.read(dioProvider).post('/coupons', data: {
                   'code': codeCtrl.text.toUpperCase(),
                   'type': type,
                   'value': double.tryParse(valueCtrl.text) ?? 0,
-                  'isActive': true,
-                  'usedCount': 0,
-                  'createdAt': FieldValue.serverTimestamp(),
                 });
-                Navigator.pop(ctx);
+                ref.invalidate(adminCouponsProvider);
+                if (ctx.mounted) Navigator.pop(ctx);
               },
               child: const Text('Save'),
             ),
@@ -474,47 +490,98 @@ class AdminCouponsScreen extends StatelessWidget {
 }
 
 // ── Admin Banners Screen ───────────────────────────────────────────────────────
-class AdminBannersScreen extends StatelessWidget {
+class AdminBannersScreen extends ConsumerWidget {
   const AdminBannersScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bannersAsync = ref.watch(adminBannersProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Banners'), automaticallyImplyLeading: false),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {},
+        onPressed: () => _showAddBannerDialog(context, ref),
         icon: const Icon(Icons.add),
         label: const Text('Add Banner'),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection(AppConstants.bannersCollection).orderBy('sortOrder').snapshots(),
-        builder: (context, snapshot) {
-          final docs = snapshot.data?.docs ?? [];
+      body: bannersAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Failed to load banners: $e')),
+        data: (docs) {
           if (docs.isEmpty) return const Center(child: Text('No banners. Add one!'));
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: docs.length,
-            itemBuilder: (_, i) {
-              final data = docs[i].data() as Map<String, dynamic>;
-              return Card(
-                child: ListTile(
-                  leading: Container(
-                    width: 60, height: 40,
-                    decoration: BoxDecoration(color: AppColors.primaryContainer, borderRadius: BorderRadius.circular(8)),
-                    child: const Center(child: Icon(Icons.image_outlined, color: AppColors.primary)),
+          return RefreshIndicator(
+            onRefresh: () async => ref.invalidate(adminBannersProvider),
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: docs.length,
+              itemBuilder: (_, i) {
+                final data = docs[i] as Map<String, dynamic>;
+                return Card(
+                  child: ListTile(
+                    leading: Container(
+                      width: 60, height: 40,
+                      decoration: BoxDecoration(color: AppColors.primaryContainer, borderRadius: BorderRadius.circular(8)),
+                      child: const Center(child: Icon(Icons.image_outlined, color: AppColors.primary)),
+                    ),
+                    title: Text(data['title'] ?? 'Banner', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    subtitle: Text(data['actionUrl'] ?? '', style: const TextStyle(fontSize: 11)),
+                    trailing: Switch(
+                      value: data['isActive'] ?? false,
+                      onChanged: (v) async {
+                        await ref.read(dioProvider).patch('/banners/${data['id']}', data: {'isActive': v});
+                        ref.invalidate(adminBannersProvider);
+                      },
+                      activeThumbColor: AppColors.primary,
+                    ),
                   ),
-                  title: Text(data['title'] ?? 'Banner', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                  subtitle: Text(data['actionUrl'] ?? '', style: const TextStyle(fontSize: 11)),
-                  trailing: Switch(
-                    value: data['isActive'] ?? false,
-                    onChanged: (v) => FirebaseFirestore.instance.collection(AppConstants.bannersCollection).doc(docs[i].id).update({'isActive': v}),
-                    activeThumbColor: AppColors.primary,
-                  ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           );
         },
+      ),
+    );
+  }
+
+  void _showAddBannerDialog(BuildContext context, WidgetRef ref) {
+    final titleCtrl = TextEditingController();
+    final subtitleCtrl = TextEditingController();
+    final imageCtrl = TextEditingController();
+    final actionCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Banner'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Title')),
+              const SizedBox(height: 8),
+              TextField(controller: subtitleCtrl, decoration: const InputDecoration(labelText: 'Subtitle')),
+              const SizedBox(height: 8),
+              TextField(controller: imageCtrl, decoration: const InputDecoration(labelText: 'Image URL')),
+              const SizedBox(height: 8),
+              TextField(controller: actionCtrl, decoration: const InputDecoration(labelText: 'Action URL (e.g. /products)')),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              await ref.read(dioProvider).post('/banners', data: {
+                'title': titleCtrl.text.trim(),
+                'subtitle': subtitleCtrl.text.trim(),
+                'imageUrl': imageCtrl.text.trim(),
+                'actionUrl': actionCtrl.text.trim(),
+                'isActive': true,
+              });
+              ref.invalidate(adminBannersProvider);
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
+          ),
+        ],
       ),
     );
   }

@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import '../../presentation/screens/auth/login_screen.dart';
 import '../../presentation/screens/auth/register_screen.dart';
-import '../../presentation/screens/auth/otp_screen.dart';
 import '../../presentation/screens/auth/forgot_password_screen.dart';
 import '../../presentation/screens/home/main_shell.dart';
 import '../../presentation/screens/home/home_screen.dart';
@@ -36,7 +35,6 @@ class AppRoutes {
   // Auth
   static const String login = '/login';
   static const String register = '/register';
-  static const String otp = '/otp';
   static const String forgotPassword = '/forgot-password';
 
   // Main App
@@ -110,7 +108,6 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: AppRoutes.login, builder: (c, s) => const LoginScreen()),
       GoRoute(
           path: AppRoutes.register, builder: (c, s) => const RegisterScreen()),
-      GoRoute(path: AppRoutes.otp, builder: (c, s) => const OtpScreen()),
       GoRoute(
           path: AppRoutes.forgotPassword,
           builder: (c, s) => const ForgotPasswordScreen()),

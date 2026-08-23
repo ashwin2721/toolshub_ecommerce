@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { query } from '../db';
+import { users } from '../db/mongo';
 import { authenticateToken, AuthRequest } from '../middlewares/auth';
 
 const router = Router();
@@ -14,6 +14,20 @@ if (!JWT_SECRET) {
   throw new Error('FATAL: JWT_SECRET environment variable is not set. Refusing to start.');
 }
 
+// Map an embedded address subdocument to the camelCase API shape.
+const mapAddress = (a: any) => ({
+  id: a.id,
+  type: a.type,
+  fullName: a.full_name,
+  phone: a.phone,
+  street: a.street,
+  city: a.city,
+  state: a.state,
+  country: a.country,
+  pinCode: a.pin_code,
+  isDefault: a.is_default,
+});
+
 // Register Endpoint
 router.post('/register', async (req, res) => {
   const { email, password, name, phone } = req.body;
@@ -22,33 +36,35 @@ router.post('/register', async (req, res) => {
   }
 
   try {
-    // Check if user exists
-    const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
-    if (existing.rows.length > 0) {
+    const existing = await users().findOne({ email });
+    if (existing) {
       return res.status(400).json({ error: 'An account already exists with this email' });
     }
 
     const userId = `user-${crypto.randomUUID()}`;
     const passwordHash = bcrypt.hashSync(password, 10);
+    const now = new Date();
 
-    await query(
-      `INSERT INTO users (id, email, password_hash, name, phone, role) 
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [userId, email, passwordHash, name, phone || null, 'customer']
-    );
+    await users().insertOne({
+      _id: userId,
+      id: userId,
+      email,
+      password_hash: passwordHash,
+      name,
+      phone: phone || null,
+      photo_url: null,
+      role: 'customer',
+      is_email_verified: false,
+      is_blocked: false,
+      addresses: [],
+      created_at: now,
+    });
 
     const token = jwt.sign({ id: userId, email, role: 'customer' }, JWT_SECRET, { expiresIn: '7d' });
-    
+
     res.status(201).json({
       token,
-      user: {
-        id: userId,
-        email,
-        name,
-        phone,
-        role: 'customer',
-        createdAt: new Date(),
-      }
+      user: { id: userId, email, name, phone, role: 'customer', createdAt: now },
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -63,16 +79,10 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    const result = await query(
-      'SELECT id, email, password_hash, name, phone, photo_url, role, is_email_verified, is_blocked, created_at FROM users WHERE email = $1',
-      [email]
-    );
-
-    if (result.rows.length === 0) {
+    const user = await users().findOne({ email });
+    if (!user) {
       return res.status(400).json({ error: 'No account found with this email' });
     }
-
-    const user = result.rows[0];
     if (user.is_blocked) {
       return res.status(403).json({ error: 'This account has been disabled' });
     }
@@ -82,8 +92,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Incorrect password. Please try again' });
     }
 
-    // Update last login
-    await query('UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = $1', [user.id]);
+    await users().updateOne({ _id: user._id }, { $set: { last_login_at: new Date() } });
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
 
@@ -98,7 +107,7 @@ router.post('/login', async (req, res) => {
         role: user.role,
         isEmailVerified: user.is_email_verified,
         createdAt: user.created_at,
-      }
+      },
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -110,18 +119,10 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
-    const result = await query(
-      'SELECT id, email, name, phone, photo_url, role, is_email_verified, created_at FROM users WHERE id = $1',
-      [req.user.id]
-    );
-
-    if (result.rows.length === 0) {
+    const user = await users().findOne({ _id: req.user.id });
+    if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-
-    const user = result.rows[0];
-    // Fetch user addresses
-    const addrResult = await query('SELECT * FROM addresses WHERE user_id = $1', [req.user.id]);
 
     res.json({
       id: user.id,
@@ -132,25 +133,14 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
       role: user.role,
       isEmailVerified: user.is_email_verified,
       createdAt: user.created_at,
-      addresses: addrResult.rows.map(row => ({
-        id: row.id,
-        type: row.type,
-        fullName: row.full_name,
-        phone: row.phone,
-        street: row.street,
-        city: row.city,
-        state: row.state,
-        country: row.country,
-        pinCode: row.pin_code,
-        isDefault: row.is_default
-      }))
+      addresses: (user.addresses || []).map(mapAddress),
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Add Address Endpoint
+// Add Address Endpoint (addresses are embedded in the user document)
 router.post('/addresses', authenticateToken, async (req: AuthRequest, res) => {
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
   const { type, fullName, phone, street, city, state, country, pinCode, isDefault } = req.body;
@@ -160,30 +150,30 @@ router.post('/addresses', authenticateToken, async (req: AuthRequest, res) => {
   }
 
   try {
+    const user = await users().findOne({ _id: req.user.id });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
     const addrId = `addr-${crypto.randomUUID()}`;
-
-    if (isDefault) {
-      // Set other addresses to not default
-      await query('UPDATE addresses SET is_default = false WHERE user_id = $1', [req.user.id]);
-    }
-
-    await query(
-      `INSERT INTO addresses (id, user_id, type, full_name, phone, street, city, state, country, pin_code, is_default)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-      [addrId, req.user.id, type || 'home', fullName, phone, street, city, state, country || 'India', pinCode, !!isDefault]
-    );
-
-    res.status(201).json({
+    const newAddr = {
       id: addrId,
-      type,
-      fullName,
+      type: type || 'home',
+      full_name: fullName,
       phone,
       street,
       city,
       state,
-      country,
-      pinCode,
-      isDefault: !!isDefault
+      country: country || 'India',
+      pin_code: pinCode,
+      is_default: !!isDefault,
+    };
+
+    let addresses: any[] = user.addresses || [];
+    if (isDefault) addresses = addresses.map((a) => ({ ...a, is_default: false }));
+    addresses.push(newAddr);
+    await users().updateOne({ _id: req.user.id }, { $set: { addresses } });
+
+    res.status(201).json({
+      id: addrId, type, fullName, phone, street, city, state, country, pinCode, isDefault: !!isDefault,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -193,10 +183,13 @@ router.post('/addresses', authenticateToken, async (req: AuthRequest, res) => {
 // Delete an Address (only the authenticated user's own address)
 router.delete('/addresses/:id', authenticateToken, async (req: AuthRequest, res) => {
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
-  const { id } = req.params;
 
   try {
-    await query('DELETE FROM addresses WHERE id = $1 AND user_id = $2', [id, req.user.id]);
+    const user = await users().findOne({ _id: req.user.id });
+    if (user) {
+      const addresses = (user.addresses || []).filter((a: any) => a.id !== req.params.id);
+      await users().updateOne({ _id: req.user.id }, { $set: { addresses } });
+    }
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -206,20 +199,20 @@ router.delete('/addresses/:id', authenticateToken, async (req: AuthRequest, res)
 // Set an Address as Default (unsets the user's other addresses)
 router.patch('/addresses/:id/default', authenticateToken, async (req: AuthRequest, res) => {
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
-  const { id } = req.params;
 
   try {
-    // Clear the default flag on all of this user's addresses first
-    await query('UPDATE addresses SET is_default = false WHERE user_id = $1', [req.user.id]);
-    // Then mark the chosen address as default (scoped to this user)
-    await query('UPDATE addresses SET is_default = true WHERE id = $1 AND user_id = $2', [id, req.user.id]);
+    const user = await users().findOne({ _id: req.user.id });
+    if (user) {
+      const addresses = (user.addresses || []).map((a: any) => ({ ...a, is_default: a.id === req.params.id }));
+      await users().updateOne({ _id: req.user.id }, { $set: { addresses } });
+    }
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Forgot Password (privacy-preserving; no Firebase)
+// Forgot Password (privacy-preserving; no account existence leak)
 router.post('/forgot-password', async (req, res) => {
   const { email } = req.body;
   if (!email) {
@@ -227,19 +220,15 @@ router.post('/forgot-password', async (req, res) => {
   }
 
   try {
-    const result = await query('SELECT id, email FROM users WHERE email = $1', [email]);
-    if (result.rows.length > 0) {
-      const user = result.rows[0];
+    const user = await users().findOne({ email });
+    if (user) {
       const resetToken = crypto.randomBytes(32).toString('hex');
-      // TODO: Persist this reset token with an expiry and deliver it to the user
-      //       by email. Email delivery is not yet implemented.
+      // TODO: Persist this reset token with an expiry and email it to the user.
       console.log(`[Password Reset] Generated reset token for ${user.email}: ${resetToken}`);
     }
-
-    // Always return the same response so account existence is not leaked
     res.json({
       success: true,
-      message: 'If an account with that email exists, a reset link has been sent.'
+      message: 'If an account with that email exists, a reset link has been sent.',
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -251,8 +240,7 @@ router.delete('/account', authenticateToken, async (req: AuthRequest, res) => {
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
-    // Addresses and wishlists cascade; orders are detached via ON DELETE SET NULL
-    await query('DELETE FROM users WHERE id = $1', [req.user.id]);
+    await users().deleteOne({ _id: req.user.id });
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
