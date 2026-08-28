@@ -11,8 +11,8 @@
 //
 // Until both are filled in, the "Upload Image" buttons show a friendly notice.
 
-const String kCloudinaryCloudName = 'YOUR_CLOUD_NAME';
-const String kCloudinaryUploadPreset = 'YOUR_UNSIGNED_PRESET';
+const String kCloudinaryCloudName = 'm0bsfqj5';
+const String kCloudinaryUploadPreset = 'toolshub';
 
 bool get kCloudinaryConfigured =>
     kCloudinaryCloudName.isNotEmpty &&
