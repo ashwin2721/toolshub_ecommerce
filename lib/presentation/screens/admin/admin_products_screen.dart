@@ -607,7 +607,7 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
                     final cats =
                         ref.watch(categoriesProvider).valueOrNull ?? const [];
                     return DropdownButtonFormField<String>(
-                      initialValue: _selectedCategoryId,
+                      value: _selectedCategoryId,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Category'),
                       items: [
