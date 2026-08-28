@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/product_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/utils/image_upload_helper.dart';
 
 final adminProductsProvider = FutureProvider<List<dynamic>>((ref) async {
   final dio = ref.watch(dioProvider);
-  final response = await dio.get('/products');
+  // Admin endpoint returns ALL products (including disabled ones) so they can
+  // be seen and re-enabled.
+  final response = await dio.get('/products/admin');
   return response.data;
 });
 
@@ -21,11 +25,116 @@ class AdminProductsScreen extends ConsumerStatefulWidget {
 class _AdminProductsScreenState extends ConsumerState<AdminProductsScreen> {
   final _searchCtrl = TextEditingController();
   String _searchQuery = '';
+  final Set<String> _selected = {};
+  bool _selectMode = false;
 
   @override
   void dispose() {
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _duplicate(Map<String, dynamic> data) async {
+    try {
+      final dio = ref.read(dioProvider);
+      await dio.post('/products', data: {
+        'name': '${data['name']} (Copy)',
+        'sku': '${data['sku']}-COPY-${DateTime.now().millisecondsSinceEpoch % 100000}',
+        'description': data['description'],
+        'price': data['price'],
+        'discountPrice': data['discountPrice'],
+        'stockQuantity': data['stockQuantity'] ?? 0,
+        'lowStockThreshold': data['lowStockThreshold'] ?? 5,
+        'categoryId': data['categoryId'],
+        'brandName': data['brandName'],
+        'imageUrls': data['imageUrls'],
+        'specifications': data['specifications'],
+        'features': data['features'],
+      });
+      ref.invalidate(adminProductsProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Product duplicated'), backgroundColor: AppColors.success));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Failed to duplicate: $e'), backgroundColor: AppColors.error));
+      }
+    }
+  }
+
+  Future<void> _deleteSelected() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete ${_selected.length} product(s)?'),
+        content: const Text('This action cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    final dio = ref.read(dioProvider);
+    for (final id in _selected) {
+      try {
+        await dio.delete('/products/$id');
+      } catch (_) {}
+    }
+    setState(() {
+      _selected.clear();
+      _selectMode = false;
+    });
+    ref.invalidate(adminProductsProvider);
+  }
+
+  void _showCsvFormatDialog() {
+    const sample =
+        'name,sku,price,discountPrice,stockQuantity,categoryId,brandName,description\n'
+        'Cordless Drill,DRL-001,8999,7499,50,cat-power-tools,DeWalt,Compact 20V drill\n'
+        'Claw Hammer,HMR-002,799,,120,cat-hand-tools,Stanley,16oz steel hammer';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Bulk Upload — CSV Format'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                  'Your CSV needs these columns (first row = headers). Copy this sample as a starting point:',
+                  style: TextStyle(fontSize: 13)),
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const SelectableText(sample,
+                    style: TextStyle(fontFamily: 'monospace', fontSize: 11)),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                  'discountPrice may be left blank. categoryId must match an existing category id.',
+                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Got it')),
+        ],
+      ),
+    );
   }
 
   @override
@@ -35,26 +144,44 @@ class _AdminProductsScreenState extends ConsumerState<AdminProductsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Products'),
+        title: Text(_selectMode ? '${_selected.length} selected' : 'Products'),
         automaticallyImplyLeading: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.upload_file_outlined),
-            onPressed: () {},
-            tooltip: 'Import CSV',
-          ),
-          IconButton(
-            icon: const Icon(Icons.download_outlined),
-            onPressed: () {},
-            tooltip: 'Export CSV',
-          ),
-          ElevatedButton.icon(
-            onPressed: () => context.go(AppRoutes.adminAddProduct),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Add Product'),
-          ),
-          const SizedBox(width: 8),
-        ],
+        actions: _selectMode
+            ? [
+                TextButton.icon(
+                  onPressed: _selected.isEmpty ? null : _deleteSelected,
+                  icon: const Icon(Icons.delete_outline, color: AppColors.error),
+                  label: Text('Delete (${_selected.length})',
+                      style: const TextStyle(color: AppColors.error)),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  tooltip: 'Cancel',
+                  onPressed: () => setState(() {
+                    _selectMode = false;
+                    _selected.clear();
+                  }),
+                ),
+                const SizedBox(width: 8),
+              ]
+            : [
+                IconButton(
+                  icon: const Icon(Icons.checklist_rounded),
+                  tooltip: 'Select',
+                  onPressed: () => setState(() => _selectMode = true),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.upload_file_outlined),
+                  onPressed: _showCsvFormatDialog,
+                  tooltip: 'Bulk upload (CSV)',
+                ),
+                ElevatedButton.icon(
+                  onPressed: () => context.go(AppRoutes.adminAddProduct),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add Product'),
+                ),
+                const SizedBox(width: 8),
+              ],
       ),
       body: Column(
         children: [
@@ -107,100 +234,215 @@ class _AdminProductsScreenState extends ConsumerState<AdminProductsScreen> {
                       final isActive = data['isActive'] ?? true;
                       final productId = data['id'] as String;
 
-                      return Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surface,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 56, height: 56,
-                              decoration: BoxDecoration(
-                                color: AppColors.surfaceVariant,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Center(child: Text('🔧', style: TextStyle(fontSize: 24))),
+                      final selected = _selected.contains(productId);
+                      return GestureDetector(
+                        onLongPress: () => setState(() {
+                          _selectMode = true;
+                          _selected.add(productId);
+                        }),
+                        onTap: () {
+                          if (_selectMode) {
+                            setState(() => selected
+                                ? _selected.remove(productId)
+                                : _selected.add(productId));
+                          } else {
+                            context.push('/product/$productId');
+                          }
+                        },
+                        child: Opacity(
+                          opacity: isActive ? 1.0 : 0.5,
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                  color: selected
+                                      ? AppColors.primary
+                                      : AppColors.border,
+                                  width: selected ? 2 : 1),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(data['name'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                                  Text('SKU: ${data['sku'] ?? ""} | Stock: ${data['stockQuantity'] ?? 0}',
-                                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                                  Text('₹${(data['price'] as num?)?.toStringAsFixed(0) ?? "0"}',
-                                      style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700, fontSize: 13)),
-                                ],
-                              ),
-                            ),
-                            Column(
+                            child: Row(
                               children: [
-                                Switch(
-                                  value: isActive,
-                                  onChanged: (v) async {
-                                    try {
-                                      final dio = ref.read(dioProvider);
-                                      await dio.put('/products/$productId', data: {'isActive': v});
-                                      ref.invalidate(adminProductsProvider);
-                                    } catch (e) {
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('Failed to update product status: $e'), backgroundColor: AppColors.error),
-                                        );
-                                      }
-                                    }
-                                  },
-                                  activeColor: AppColors.primary,
-                                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                if (_selectMode) ...[
+                                  Icon(
+                                      selected
+                                          ? Icons.check_circle_rounded
+                                          : Icons.circle_outlined,
+                                      color: selected
+                                          ? AppColors.primary
+                                          : AppColors.textSecondary),
+                                  const SizedBox(width: 10),
+                                ],
+                                Container(
+                                  width: 56,
+                                  height: 56,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surfaceVariant,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Center(
+                                      child: Text('🔧',
+                                          style: TextStyle(fontSize: 24))),
                                 ),
-                                PopupMenuButton<String>(
-                                  itemBuilder: (_) => [
-                                    const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                                    const PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
-                                    const PopupMenuItem(value: 'delete',
-                                        child: Text('Delete', style: TextStyle(color: AppColors.error))),
-                                  ],
-                                  onSelected: (action) {
-                                    if (action == 'delete') {
-                                      showDialog(
-                                        context: context,
-                                        builder: (_) => AlertDialog(
-                                          title: const Text('Delete Product?'),
-                                          content: const Text('This action cannot be undone.'),
-                                          actions: [
-                                            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-                                            ElevatedButton(
-                                              onPressed: () async {
-                                                try {
-                                                  final dio = ref.read(dioProvider);
-                                                  await dio.delete('/products/$productId');
-                                                  ref.invalidate(adminProductsProvider);
-                                                  if (!context.mounted) return;
-                                                  Navigator.pop(context);
-                                                } catch (e) {
-                                                  if (!context.mounted) return;
-                                                  ScaffoldMessenger.of(context).showSnackBar(
-                                                    SnackBar(content: Text('Failed to delete product: $e'), backgroundColor: AppColors.error),
-                                                  );
-                                                }
-                                              },
-                                              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-                                              child: const Text('Delete'),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(data['name'] ?? '',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                    fontWeight: FontWeight.w600,
+                                                    fontSize: 14)),
+                                          ),
+                                          if (!isActive) ...[
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 1),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.error
+                                                    .withValues(alpha: 0.12),
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                              ),
+                                              child: const Text('Hidden',
+                                                  style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: AppColors.error,
+                                                      fontWeight:
+                                                          FontWeight.w700)),
                                             ),
                                           ],
-                                        ),
-                                      );
-                                    }
-                                  },
+                                        ],
+                                      ),
+                                      Text(
+                                          'SKU: ${data['sku'] ?? ""} | Stock: ${data['stockQuantity'] ?? 0}',
+                                          style: const TextStyle(
+                                              color: AppColors.textSecondary,
+                                              fontSize: 11)),
+                                      Text(
+                                          '₹${(data['price'] as num?)?.toStringAsFixed(0) ?? "0"}',
+                                          style: const TextStyle(
+                                              color: AppColors.primary,
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 13)),
+                                    ],
+                                  ),
+                                ),
+                                Column(
+                                  children: [
+                                    Switch(
+                                      value: isActive,
+                                      onChanged: (v) async {
+                                        try {
+                                          final dio = ref.read(dioProvider);
+                                          await dio.put('/products/$productId',
+                                              data: {'isActive': v});
+                                          ref.invalidate(adminProductsProvider);
+                                        } catch (e) {
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              SnackBar(
+                                                  content: Text(
+                                                      'Failed to update product status: $e'),
+                                                  backgroundColor:
+                                                      AppColors.error),
+                                            );
+                                          }
+                                        }
+                                      },
+                                      activeColor: AppColors.primary,
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    PopupMenuButton<String>(
+                                      itemBuilder: (_) => [
+                                        const PopupMenuItem(
+                                            value: 'view',
+                                            child: Text('View details')),
+                                        const PopupMenuItem(
+                                            value: 'duplicate',
+                                            child: Text('Duplicate')),
+                                        const PopupMenuItem(
+                                            value: 'delete',
+                                            child: Text('Delete',
+                                                style: TextStyle(
+                                                    color: AppColors.error))),
+                                      ],
+                                      onSelected: (action) {
+                                        if (action == 'view') {
+                                          context.push('/product/$productId');
+                                        } else if (action == 'duplicate') {
+                                          _duplicate(data);
+                                        } else if (action == 'delete') {
+                                          showDialog(
+                                            context: context,
+                                            builder: (_) => AlertDialog(
+                                              title:
+                                                  const Text('Delete Product?'),
+                                              content: const Text(
+                                                  'This action cannot be undone.'),
+                                              actions: [
+                                                TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.pop(context),
+                                                    child:
+                                                        const Text('Cancel')),
+                                                ElevatedButton(
+                                                  onPressed: () async {
+                                                    try {
+                                                      final dio =
+                                                          ref.read(dioProvider);
+                                                      await dio.delete(
+                                                          '/products/$productId');
+                                                      ref.invalidate(
+                                                          adminProductsProvider);
+                                                      if (!context.mounted) {
+                                                        return;
+                                                      }
+                                                      Navigator.pop(context);
+                                                    } catch (e) {
+                                                      if (!context.mounted) {
+                                                        return;
+                                                      }
+                                                      ScaffoldMessenger.of(
+                                                              context)
+                                                          .showSnackBar(
+                                                        SnackBar(
+                                                            content: Text(
+                                                                'Failed to delete product: $e'),
+                                                            backgroundColor:
+                                                                AppColors.error),
+                                                      );
+                                                    }
+                                                  },
+                                                  style:
+                                                      ElevatedButton.styleFrom(
+                                                          backgroundColor:
+                                                              AppColors.error),
+                                                  child: const Text('Delete'),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        }
+                                      },
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
-                          ],
+                          ),
                         ),
                       );
                     },
@@ -230,7 +472,8 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
   final _priceCtrl = TextEditingController();
   final _discountPriceCtrl = TextEditingController();
   final _stockCtrl = TextEditingController();
-  final _categoryCtrl = TextEditingController();
+  final _lowStockCtrl = TextEditingController(text: '5');
+  String? _selectedCategoryId;
   final _brandCtrl = TextEditingController();
   final _imageUrlCtrl = TextEditingController();
   final List<String> _imageUrls = [];
@@ -238,6 +481,7 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
   bool _isFlashSale = false;
   bool _isNewArrival = false;
   bool _loading = false;
+  bool _uploadingImage = false;
 
   @override
   void dispose() {
@@ -247,7 +491,7 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
     _priceCtrl.dispose();
     _discountPriceCtrl.dispose();
     _stockCtrl.dispose();
-    _categoryCtrl.dispose();
+    _lowStockCtrl.dispose();
     _brandCtrl.dispose();
     _imageUrlCtrl.dispose();
     super.dispose();
@@ -260,6 +504,22 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
       _imageUrls.add(url);
       _imageUrlCtrl.clear();
     });
+  }
+
+  Future<void> _uploadImage() async {
+    setState(() => _uploadingImage = true);
+    try {
+      final url = await pickAndUploadImage();
+      if (url != null) setState(() => _imageUrls.add(url));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: AppColors.error));
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingImage = false);
+    }
   }
 
   Future<void> _save() async {
@@ -276,8 +536,9 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
             ? double.tryParse(_discountPriceCtrl.text)
             : null,
         'stockQuantity': int.tryParse(_stockCtrl.text) ?? 0,
-        'categoryId': _categoryCtrl.text.isNotEmpty ? _categoryCtrl.text : null,
-        'brandId': _brandCtrl.text.isNotEmpty ? _brandCtrl.text : null,
+        'lowStockThreshold': int.tryParse(_lowStockCtrl.text) ?? 5,
+        'categoryId': _selectedCategoryId,
+        'brandName': _brandCtrl.text.isNotEmpty ? _brandCtrl.text : null,
         'imageUrls': _imageUrls,
         'isFeatured': _isFeatured,
         'isFlashSale': _isFlashSale,
@@ -326,19 +587,41 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
                 const SizedBox(width: 12),
                 Expanded(child: TextFormField(controller: _stockCtrl, decoration: const InputDecoration(labelText: 'Stock *'),
                     keyboardType: TextInputType.number)),
-              ]),
-              const SizedBox(height: 12),
-              Row(children: [
-                Expanded(child: TextFormField(controller: _priceCtrl, decoration: const InputDecoration(labelText: 'Price (₹) *', prefixIcon: Icon(Icons.currency_rupee)),
-                    keyboardType: TextInputType.number,
-                    validator: (v) => v?.isEmpty ?? true ? 'Required' : null)),
                 const SizedBox(width: 12),
-                Expanded(child: TextFormField(controller: _discountPriceCtrl, decoration: const InputDecoration(labelText: 'Discount Price (₹)'),
+                Expanded(child: TextFormField(controller: _lowStockCtrl, decoration: const InputDecoration(labelText: 'Low-stock alert'),
                     keyboardType: TextInputType.number)),
               ]),
               const SizedBox(height: 12),
               Row(children: [
-                Expanded(child: TextFormField(controller: _categoryCtrl, decoration: const InputDecoration(labelText: 'Category'))),
+                Expanded(child: TextFormField(controller: _priceCtrl, decoration: const InputDecoration(labelText: 'MRP (₹) *', prefixIcon: Icon(Icons.currency_rupee)),
+                    keyboardType: TextInputType.number,
+                    validator: (v) => v?.isEmpty ?? true ? 'Required' : null)),
+                const SizedBox(width: 12),
+                Expanded(child: TextFormField(controller: _discountPriceCtrl, decoration: const InputDecoration(labelText: 'Selling Price (₹)'),
+                    keyboardType: TextInputType.number)),
+              ]),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(
+                  child: Consumer(builder: (context, ref, _) {
+                    final cats =
+                        ref.watch(categoriesProvider).valueOrNull ?? const [];
+                    return DropdownButtonFormField<String>(
+                      initialValue: _selectedCategoryId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Category'),
+                      items: [
+                        for (final c in cats)
+                          DropdownMenuItem(
+                              value: c.id,
+                              child: Text(c.name,
+                                  overflow: TextOverflow.ellipsis)),
+                      ],
+                      onChanged: (v) =>
+                          setState(() => _selectedCategoryId = v),
+                    );
+                  }),
+                ),
                 const SizedBox(width: 12),
                 Expanded(child: TextFormField(controller: _brandCtrl, decoration: const InputDecoration(labelText: 'Brand'))),
               ]),
@@ -349,15 +632,30 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
               // Images
               Text('Product Images', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 4),
-              const Text('Add one or more image URLs — the first is the main image.',
+              const Text('Upload images from your device, or paste image URLs. The first image is the main one.',
                   style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _uploadingImage ? null : _uploadImage,
+                  icon: _uploadingImage
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.upload_rounded, size: 18),
+                  label:
+                      Text(_uploadingImage ? 'Uploading…' : 'Upload from device'),
+                ),
+              ),
               const SizedBox(height: 8),
               Row(children: [
                 Expanded(
                     child: TextFormField(
                         controller: _imageUrlCtrl,
                         decoration: const InputDecoration(
-                            labelText: 'Image URL',
+                            labelText: 'or paste an Image URL',
                             prefixIcon: Icon(Icons.link_rounded),
                             hintText: 'https://...'),
                         onFieldSubmitted: (_) => _addImage())),

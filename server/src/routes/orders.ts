@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import crypto from 'crypto';
-import { orders, products, users } from '../db/mongo';
+import { orders, products, users, coupons } from '../db/mongo';
 import { authenticateToken, requireAdmin, AuthRequest } from '../middlewares/auth';
 import { computeDelivery, deliverySettings } from '../services/delivery';
 
@@ -85,9 +85,22 @@ router.post('/orders', authenticateToken, async (req: AuthRequest, res) => {
     if (!quote.deliverable) {
       throw new Error(quote.label || 'Delivery is not available to the selected address.');
     }
-    const shipping = isExpress ? deliverySettings.expressSurcharge : quote.deliveryFee;
+    let shipping = isExpress ? deliverySettings.expressSurcharge : quote.deliveryFee;
     const gst = subtotal * GST_RATE;
-    const discount = 0;
+
+    // Apply a promo code — validated server-side against active coupons so the
+    // charged total matches (client-supplied discounts are never trusted).
+    let discount = 0;
+    const couponCode = (req.body.couponCode || '').toString().toUpperCase().trim();
+    if (couponCode) {
+      const c = await coupons().findOne({ code: couponCode, is_active: true });
+      if (c) {
+        if (c.type === 'percentage') discount = (subtotal * (Number(c.value) || 0)) / 100;
+        else if (c.type === 'fixed') discount = Number(c.value) || 0;
+        else if (c.type === 'free_shipping') shipping = 0;
+        if (discount > subtotal) discount = subtotal;
+      }
+    }
     const total = subtotal + shipping + gst - discount;
 
     // 3. Decrement inventory with a guard against concurrent oversell.
@@ -274,6 +287,43 @@ router.put('/admin/customers/:id/block', authenticateToken, requireAdmin, async 
   const { isBlocked } = req.body;
   try {
     await users().updateOne({ _id: id }, { $set: { is_blocked: isBlocked } });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Full Customer Details (Admin only) — everything captured at registration.
+router.get('/admin/customers/:id', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+  try {
+    const u = await users().findOne({ _id: req.params.id });
+    if (!u) return res.status(404).json({ error: 'Customer not found' });
+    res.json({
+      id: u.id,
+      email: u.email,
+      name: u.name,
+      phone: u.phone,
+      photoUrl: u.photo_url,
+      role: u.role,
+      isBlocked: u.is_blocked,
+      isEmailVerified: u.is_email_verified,
+      createdAt: u.created_at,
+      lastLoginAt: u.last_login_at,
+      addresses: (u.addresses || []).map((a: any) => ({
+        id: a.id, type: a.type, fullName: a.full_name, phone: a.phone,
+        street: a.street, city: a.city, state: a.state, country: a.country,
+        pinCode: a.pin_code, isDefault: a.is_default,
+      })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete a Customer (Admin only). Never deletes admin accounts.
+router.delete('/admin/customers/:id', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+  try {
+    await users().deleteOne({ _id: req.params.id, role: 'customer' });
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

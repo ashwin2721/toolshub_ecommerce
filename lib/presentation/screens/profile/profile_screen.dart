@@ -19,6 +19,7 @@ class ProfileScreen extends ConsumerWidget {
     final wishlist = ref.watch(wishlistProvider);
 
     return StorePage(
+      showFooter: false,
       body: MaxWidthContainer(
         verticalPadding: 24,
         child: userAsync.when(
@@ -206,6 +207,26 @@ class ProfileScreen extends ConsumerWidget {
                   padding: const EdgeInsets.all(16),
                   child: ElevatedButton.icon(
                     onPressed: () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Sign Out'),
+                          content:
+                              const Text('Are you sure you want to log out?'),
+                          actions: [
+                            TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: const Text('Cancel')),
+                            ElevatedButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.error),
+                              child: const Text('Log Out'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm != true) return;
                       await ref.read(authNotifierProvider.notifier).signOut();
                       if (context.mounted) context.go(AppRoutes.login);
                     },

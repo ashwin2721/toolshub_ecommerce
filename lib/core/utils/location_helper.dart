@@ -58,7 +58,15 @@ Future<ResolvedAddress> reverseGeocode(Dio dio, double lat, double lng) async {
 /// Detects the current position and reverse-geocodes it into an address.
 Future<ResolvedAddress> resolveCurrentAddress(Dio dio) async {
   final position = await getCurrentPosition();
-  return reverseGeocode(dio, position.latitude, position.longitude);
+  try {
+    return await reverseGeocode(dio, position.latitude, position.longitude);
+  } on DioException {
+    // The geocoding provider can be unavailable (e.g. it blocks datacenter IPs
+    // in production). Fail with a friendly, actionable message instead of a raw
+    // Dio error dump so the user can just type their address.
+    throw Exception(
+        'Could not detect your address automatically. Please enter it manually.');
+  }
 }
 
 /// Forward-geocode a free-text address into coordinates via the backend.

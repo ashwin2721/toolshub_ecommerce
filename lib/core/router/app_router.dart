@@ -27,6 +27,7 @@ import '../../presentation/screens/admin/admin_products_screen.dart';
 import '../../presentation/screens/admin/admin_orders_screen.dart';
 import '../../presentation/screens/admin/admin_content_screen.dart';
 import '../../presentation/screens/admin/admin_delivery_screen.dart';
+import '../../presentation/screens/admin/admin_reviews_screen.dart';
 import '../../presentation/providers/auth_provider.dart';
 
 class AppRoutes {
@@ -79,6 +80,7 @@ class AppRoutes {
   static const String adminReports = '/admin/reports';
   static const String adminContent = '/admin/content';
   static const String adminDelivery = '/admin/delivery';
+  static const String adminReviews = '/admin/reviews';
 }
 
 final goRouterProvider = Provider<GoRouter>((ref) {
@@ -266,6 +268,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.adminDelivery,
             builder: (c, s) => const AdminDeliveryScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.adminReviews,
+            builder: (c, s) => const AdminReviewsScreen(),
           ),
         ],
       ),

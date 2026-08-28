@@ -107,8 +107,22 @@ class _AdminShellState extends State<AdminShell> {
                         isSelected: false,
                         onTap: () => context.go(AppRoutes.adminDelivery),
                       ),
+                      _SideNavItem(
+                        icon: Icons.reviews_outlined,
+                        activeIcon: Icons.reviews_rounded,
+                        label: 'Reviews',
+                        isSelected: false,
+                        onTap: () => context.go(AppRoutes.adminReviews),
+                      ),
                           ],
                         ),
+                      ),
+                      _SideNavItem(
+                        icon: Icons.account_circle_outlined,
+                        activeIcon: Icons.account_circle_rounded,
+                        label: 'My Profile',
+                        isSelected: false,
+                        onTap: () => context.go(AppRoutes.profile),
                       ),
                       _SideNavItem(
                         icon: Icons.store_outlined,

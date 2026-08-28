@@ -7,6 +7,7 @@
 
 import { MongoClient, Db } from 'mongodb';
 import bcrypt from 'bcrypt';
+import { demoCategories, demoProducts } from './demoData';
 
 // ── Minimal collection interface both backends satisfy ──────────────────────
 interface Cursor {
@@ -149,6 +150,7 @@ export const categories = () => coll('categories');
 export const banners = () => coll('banners');
 export const orders = () => coll('orders');
 export const coupons = () => coll('coupons');
+export const reviews = () => coll('reviews');
 export const supportTickets = () => coll('support_tickets');
 
 // Fresh install: seed ONLY a single admin account so the admin panel is
@@ -156,24 +158,38 @@ export const supportTickets = () => coll('support_tickets');
 // starts empty and the admin adds real data. Credentials are configurable via
 // ADMIN_EMAIL / ADMIN_PASSWORD in the environment.
 async function seedIfEmpty() {
-  if ((await users().countDocuments({ role: 'admin' })) > 0) return;
-  const email = (process.env.ADMIN_EMAIL || 'admin@toolshub.com').toLowerCase();
-  const password = process.env.ADMIN_PASSWORD || 'admin123';
-  await users().insertOne({
-    _id: 'user-admin',
-    id: 'user-admin',
-    email,
-    password_hash: bcrypt.hashSync(password, 10),
-    name: 'Admin',
-    phone: null,
-    photo_url: null,
-    role: 'admin',
-    is_email_verified: true,
-    is_blocked: false,
-    addresses: [],
-    created_at: new Date(),
-  });
-  console.log(`Seeded admin account (${email}).`);
+  // Always ensure an admin account exists so the admin panel is reachable.
+  if ((await users().countDocuments({ role: 'admin' })) === 0) {
+    const email = (process.env.ADMIN_EMAIL || 'admin@toolshub.com').toLowerCase();
+    const password = process.env.ADMIN_PASSWORD || 'admin123';
+    await users().insertOne({
+      _id: 'user-admin',
+      id: 'user-admin',
+      email,
+      password_hash: bcrypt.hashSync(password, 10),
+      name: 'Admin',
+      phone: null,
+      photo_url: null,
+      role: 'admin',
+      is_email_verified: true,
+      is_blocked: false,
+      addresses: [],
+      created_at: new Date(),
+    });
+    console.log(`Seeded admin account (${email}).`);
+  }
+
+  // Optionally seed a demo catalog for development convenience. Off by default
+  // (the store stays empty); set SEED_DEMO=true in the environment to enable.
+  if (process.env.SEED_DEMO === 'true') {
+    if ((await categories().countDocuments({})) === 0) {
+      await categories().insertMany(demoCategories);
+    }
+    if ((await products().countDocuments({})) === 0) {
+      await products().insertMany(demoProducts);
+      console.log(`Seeded ${demoProducts.length} demo products.`);
+    }
+  }
 }
 
 async function ensureIndexes() {

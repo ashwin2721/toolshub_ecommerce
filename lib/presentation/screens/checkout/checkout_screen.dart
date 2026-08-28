@@ -208,6 +208,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           'pinCode': _pincodeCtrl.text,
         },
         'paymentMethod': _payment,
+        'couponCode': cart.couponCode,
         'totalAmount': grandTotal,
       });
 

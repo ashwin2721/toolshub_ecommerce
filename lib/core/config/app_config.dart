@@ -27,7 +27,7 @@ class AppConfig {
       default:
         return AppConfig(
           appTitle: 'ToolsHub Dev',
-          apiBaseUrl: 'http://localhost:5000/api',
+          apiBaseUrl: 'http://localhost:5005/api',
           environment: AppEnvironment.dev,
         );
     }

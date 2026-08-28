@@ -73,6 +73,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         : null;
 
     return StorePage(
+      showFooter: false,
       body: MaxWidthContainer(
         verticalPadding: 24,
         child: Column(

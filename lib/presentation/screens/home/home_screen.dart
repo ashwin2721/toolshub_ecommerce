@@ -10,6 +10,47 @@ import '../../../core/router/app_router.dart';
 import '../../widgets/common/store_chrome.dart';
 import '../../widgets/product/product_card.dart';
 
+/// Client-side storefront filters applied to the fetched product list.
+class HomeFilters {
+  final String categoryId; // '' = all
+  final String brand; // '' = all
+  final double minRating; // 0 = all
+  final double maxPrice; // 0 = all (cap on effective price)
+  final String material; // '' = all (keyword match)
+  final bool offerOnly; // only discounted items
+  const HomeFilters({
+    this.categoryId = '',
+    this.brand = '',
+    this.minRating = 0,
+    this.maxPrice = 0,
+    this.material = '',
+    this.offerOnly = false,
+  });
+  HomeFilters copyWith({
+    String? categoryId,
+    String? brand,
+    double? minRating,
+    double? maxPrice,
+    String? material,
+    bool? offerOnly,
+  }) =>
+      HomeFilters(
+        categoryId: categoryId ?? this.categoryId,
+        brand: brand ?? this.brand,
+        minRating: minRating ?? this.minRating,
+        maxPrice: maxPrice ?? this.maxPrice,
+        material: material ?? this.material,
+        offerOnly: offerOnly ?? this.offerOnly,
+      );
+  bool get isActive =>
+      categoryId.isNotEmpty ||
+      brand.isNotEmpty ||
+      minRating > 0 ||
+      maxPrice > 0 ||
+      material.isNotEmpty ||
+      offerOnly;
+}
+
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -22,6 +63,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   SortBy _sort = SortBy.latest;
   int _page = 0;
+  HomeFilters _filters = const HomeFilters();
+
+  // Client-side filtering on the fetched product list.
+  List<ProductEntity> _applyFilters(List<ProductEntity> list) {
+    return list.where((p) {
+      if (_filters.categoryId.isNotEmpty && p.categoryId != _filters.categoryId) {
+        return false;
+      }
+      if (_filters.brand.isNotEmpty && p.brandName != _filters.brand) {
+        return false;
+      }
+      if (_filters.minRating > 0 && p.rating < _filters.minRating) return false;
+      if (_filters.maxPrice > 0 && p.effectivePrice > _filters.maxPrice) {
+        return false;
+      }
+      if (_filters.offerOnly &&
+          !(p.discountPrice != null &&
+              p.discountPrice! > 0 &&
+              p.discountPrice! < p.price)) {
+        return false;
+      }
+      if (_filters.material.isNotEmpty) {
+        final hay =
+            '${p.name} ${p.description} ${p.specifications ?? ''}'.toLowerCase();
+        if (!hay.contains(_filters.material.toLowerCase())) return false;
+      }
+      return true;
+    }).toList();
+  }
 
   // Client-side sort so it works regardless of what the backend returns.
   List<ProductEntity> _sortProducts(List<ProductEntity> products) {
@@ -51,6 +121,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ref.watch(productsProvider(const ProductFilter(limit: 60)));
 
     return StorePage(
+      showFooter: true,
       body: MaxWidthContainer(
         verticalPadding: 24,
         child: Column(
@@ -64,6 +135,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 _sort = value;
                 _page = 0;
               }),
+              filters: _filters,
+              onFiltersChanged: (f) => setState(() {
+                _filters = f;
+                _page = 0;
+              }),
             ),
             const SizedBox(height: 26),
             Text('Tools For You!',
@@ -75,7 +151,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             productsAsync.when(
               data: (products) {
                 if (products.isEmpty) return const _EmptyGrid();
-                final sorted = _sortProducts(products);
+                final filtered = _applyFilters(products);
+                if (filtered.isEmpty) {
+                  return _NoMatches(
+                    onClear: () => setState(() {
+                      _filters = const HomeFilters();
+                      _page = 0;
+                    }),
+                  );
+                }
+                final sorted = _sortProducts(filtered);
                 final totalPages = (sorted.length / _pageSize).ceil();
                 final page = _page.clamp(0, totalPages - 1).toInt();
                 final pageItems =
@@ -186,21 +271,69 @@ class _StoreHero extends ConsumerWidget {
 }
 
 // ── Filter pill bar + sort ───────────────────────────────────────────────────
-class _FilterBar extends StatelessWidget {
+class _FilterBar extends ConsumerWidget {
   final SortBy sort;
   final ValueChanged<SortBy> onSortChanged;
-  const _FilterBar({required this.sort, required this.onSortChanged});
+  final HomeFilters filters;
+  final ValueChanged<HomeFilters> onFiltersChanged;
+  const _FilterBar({
+    required this.sort,
+    required this.onSortChanged,
+    required this.filters,
+    required this.onFiltersChanged,
+  });
+
+  static const _materials = [
+    'Steel',
+    'Carbide',
+    'Aluminium',
+    'Plastic',
+    'Rubber',
+    'Lithium',
+  ];
 
   @override
-  Widget build(BuildContext context) {
-    const filters = [
-      'Tool Type',
-      'Price',
-      'Review',
-      'Brand',
-      'Material',
-      'Offer',
+  Widget build(BuildContext context, WidgetRef ref) {
+    final categories = ref.watch(categoriesProvider).valueOrNull ?? const [];
+    final products =
+        ref.watch(productsProvider(const ProductFilter(limit: 60))).valueOrNull ??
+            const <ProductEntity>[];
+    final brands = <String>{
+      for (final p in products)
+        if (p.brandName.isNotEmpty) p.brandName
+    }.toList()
+      ..sort();
+
+    final toolTypeOptions = <(String, String)>[
+      ('All Tools', ''),
+      for (final c in categories) (c.name, c.id),
     ];
+    final brandOptions = <(String, String)>[
+      ('All Brands', ''),
+      for (final b in brands) (b, b),
+    ];
+    final materialOptions = <(String, String)>[
+      ('All Materials', ''),
+      for (final m in _materials) (m, m),
+    ];
+    const priceOptions = <(String, double)>[
+      ('Any Price', 0),
+      ('Under ₹1,000', 1000),
+      ('Under ₹5,000', 5000),
+      ('Under ₹10,000', 10000),
+      ('Under ₹20,000', 20000),
+    ];
+    const reviewOptions = <(String, double)>[
+      ('Any Rating', 0),
+      ('4★ & up', 4),
+      ('3★ & up', 3),
+      ('2★ & up', 2),
+    ];
+    const offerOptions = <(String, bool)>[
+      ('All Items', false),
+      ('On Offer', true),
+    ];
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -209,8 +342,45 @@ class _FilterBar extends StatelessWidget {
             spacing: 10,
             runSpacing: 10,
             children: [
-              for (final f in filters) _FilterPill(label: f, caret: true),
-              const _FilterPill(label: 'All Filters', icon: Icons.tune_rounded),
+              _MenuPill<String>(
+                base: 'Tool Type',
+                selected: filters.categoryId,
+                options: toolTypeOptions,
+                onSelected: (v) => onFiltersChanged(filters.copyWith(categoryId: v)),
+              ),
+              _MenuPill<double>(
+                base: 'Price',
+                selected: filters.maxPrice,
+                options: priceOptions,
+                onSelected: (v) => onFiltersChanged(filters.copyWith(maxPrice: v)),
+              ),
+              _MenuPill<double>(
+                base: 'Review',
+                selected: filters.minRating,
+                options: reviewOptions,
+                onSelected: (v) => onFiltersChanged(filters.copyWith(minRating: v)),
+              ),
+              _MenuPill<String>(
+                base: 'Brand',
+                selected: filters.brand,
+                options: brandOptions,
+                onSelected: (v) => onFiltersChanged(filters.copyWith(brand: v)),
+              ),
+              _MenuPill<String>(
+                base: 'Material',
+                selected: filters.material,
+                options: materialOptions,
+                onSelected: (v) => onFiltersChanged(filters.copyWith(material: v)),
+              ),
+              _MenuPill<bool>(
+                base: 'Offer',
+                selected: filters.offerOnly,
+                options: offerOptions,
+                onSelected: (v) => onFiltersChanged(filters.copyWith(offerOnly: v)),
+              ),
+              if (filters.isActive)
+                _ClearFiltersPill(
+                    onTap: () => onFiltersChanged(const HomeFilters())),
             ],
           ),
         ),
@@ -305,37 +475,137 @@ class _SortByPill extends StatelessWidget {
   }
 }
 
-class _FilterPill extends StatelessWidget {
-  final String label;
-  final bool caret;
-  final IconData? icon;
-  const _FilterPill({required this.label, this.caret = false, this.icon});
+// A functional filter pill backed by a dropdown menu. The first option is
+// treated as the "default/all" value; selecting anything else highlights it.
+class _MenuPill<T extends Object> extends StatelessWidget {
+  final String base;
+  final T selected;
+  final List<(String, T)> options;
+  final ValueChanged<T> onSelected;
+  const _MenuPill({
+    required this.base,
+    required this.selected,
+    required this.options,
+    required this.onSelected,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.border),
+    final active = selected != options.first.$2;
+    String label = base;
+    if (active) {
+      final match = options.where((o) => o.$2 == selected);
+      if (match.isNotEmpty) label = match.first.$1;
+    }
+    return PopupMenuButton<T>(
+      position: PopupMenuPosition.under,
+      color: AppColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: AppColors.border),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 16, color: AppColors.textPrimary),
-            const SizedBox(width: 6),
+      onSelected: onSelected,
+      itemBuilder: (_) => [
+        for (final (text, val) in options)
+          PopupMenuItem<T>(
+            value: val,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 24,
+                  child: val == selected
+                      ? const Icon(Icons.check_rounded,
+                          size: 16, color: AppColors.primary)
+                      : null,
+                ),
+                Text(text,
+                    style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 13,
+                        fontWeight:
+                            val == selected ? FontWeight.w700 : FontWeight.w500)),
+              ],
+            ),
+          ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        decoration: BoxDecoration(
+          color: active ? AppColors.primary : AppColors.surface,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: active ? AppColors.primary : AppColors.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label,
+                style: TextStyle(
+                    color: active ? Colors.white : AppColors.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600)),
+            Icon(Icons.keyboard_arrow_down_rounded,
+                size: 18,
+                color: active ? Colors.white : AppColors.textSecondary),
           ],
-          Text(label,
-              style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600)),
-          if (caret)
-            const Icon(Icons.keyboard_arrow_down_rounded,
-                size: 18, color: AppColors.textSecondary),
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ClearFiltersPill extends StatelessWidget {
+  final VoidCallback onTap;
+  const _ClearFiltersPill({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.close_rounded, size: 16, color: AppColors.error),
+            SizedBox(width: 4),
+            Text('Clear',
+                style: TextStyle(
+                    color: AppColors.error,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Shown when active filters match no products.
+class _NoMatches extends StatelessWidget {
+  final VoidCallback onClear;
+  const _NoMatches({required this.onClear});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 56),
+      child: Center(
+        child: Column(
+          children: [
+            const Icon(Icons.search_off_rounded,
+                size: 56, color: AppColors.textSecondary),
+            const SizedBox(height: 12),
+            const Text('No products match your filters',
+                style: TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            TextButton(onPressed: onClear, child: const Text('Clear filters')),
+          ],
+        ),
       ),
     );
   }

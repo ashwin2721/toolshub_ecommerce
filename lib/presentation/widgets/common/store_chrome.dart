@@ -10,6 +10,7 @@ import '../../../domain/entities/product_entity.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/product_provider.dart';
+import '../../providers/app_provider.dart';
 import 'app_logo.dart';
 
 /// Shopcart-style storefront page: dark announcement bar + white web header,
@@ -19,7 +20,9 @@ class StorePage extends StatelessWidget {
   final Widget body;
   final bool showFooter;
 
-  const StorePage({super.key, required this.body, this.showFooter = true});
+  // Footer shows only where explicitly enabled (the Home page). Every other
+  // page — search, cart, profile and its sub-pages, admin, etc. — omits it.
+  const StorePage({super.key, required this.body, this.showFooter = false});
 
   @override
   Widget build(BuildContext context) {
@@ -135,6 +138,7 @@ class StoreHeader extends ConsumerWidget {
     // narrower than desktop (covers the tablet range so it never overflows).
     final compact = !context.isDesktop;
     final cartCount = ref.watch(cartItemCountProvider);
+    final compareCount = ref.watch(comparisonProvider).length;
     final user = ref.watch(currentUserProvider).valueOrNull;
 
     return DecoratedBox(
@@ -144,64 +148,91 @@ class StoreHeader extends ConsumerWidget {
       ),
       child: MaxWidthContainer(
         verticalPadding: 12,
-        child: Row(
+        // Column so the compact (mobile/tablet) header can add a full-width
+        // inline search row beneath the logo/actions row.
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Logo
-            GestureDetector(
-              onTap: () => context.go(AppRoutes.home),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const AppLogo(size: 34),
-                  const SizedBox(width: 8),
-                  Text('TOOLSHUB',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            color: AppColors.primary,
-                            letterSpacing: 1,
-                          )),
+            Row(
+              children: [
+                // Logo
+                GestureDetector(
+                  onTap: () => context.go(AppRoutes.home),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const AppLogo(size: 34),
+                      const SizedBox(width: 8),
+                      Text('TOOLSHUB',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.w900,
+                                color: AppColors.primary,
+                                letterSpacing: 1,
+                              )),
+                    ],
+                  ),
+                ),
+                if (!compact) ...[
+                  const SizedBox(width: 36),
+                  const _CategoriesNavLink(),
+                  _NavLink(
+                      label: 'Deals',
+                      onTap: () => context.go(Uri(
+                          path: AppRoutes.productList,
+                          queryParameters: {'deals': 'true'}).toString())),
+                  _NavLink(
+                      label: "What's New",
+                      onTap: () => context.go(AppRoutes.whatsNew)),
                 ],
-              ),
+                const Spacer(),
+                // Desktop keeps the inline live-search inside the header row.
+                // On mobile it moves to its own full-width row below, so the
+                // navigate-away search icon is no longer needed.
+                if (!compact) ...[
+                  const SizedBox(
+                    width: 260,
+                    child: _HeaderSearch(),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                // Compare shortcut — appears once products are added to comparison.
+                if (compareCount > 0) ...[
+                  _HeaderAction(
+                    icon: Icons.compare_arrows_rounded,
+                    label: 'Compare',
+                    showLabel: !compact,
+                    badgeCount: compareCount,
+                    onTap: () => context.push(AppRoutes.comparison),
+                  ),
+                  const SizedBox(width: 4),
+                ],
+                _HeaderAction(
+                  icon: Icons.person_outline_rounded,
+                  label: user != null ? 'Account' : 'Sign In',
+                  showLabel: !compact,
+                  onTap: () => context.go(AppRoutes.profile),
+                ),
+                const SizedBox(width: 4),
+                _HeaderAction(
+                  icon: Icons.shopping_cart_outlined,
+                  label: 'Cart',
+                  showLabel: !compact,
+                  badgeCount: cartCount,
+                  onTap: () => context.go(AppRoutes.cart),
+                ),
+              ],
             ),
-            if (!compact) ...[
-              const SizedBox(width: 36),
-              const _CategoriesNavLink(),
-              _NavLink(
-                  label: 'Deals',
-                  onTap: () => context.go(Uri(
-                      path: AppRoutes.productList,
-                      queryParameters: {'deals': 'true'}).toString())),
-              _NavLink(
-                  label: "What's New",
-                  onTap: () => context.go(AppRoutes.whatsNew)),
+            // Mobile/tablet: same inline live-search dropdown as desktop,
+            // full-width beneath the header row, instead of routing away to
+            // a separate /search page.
+            if (compact) ...[
+              const SizedBox(height: 10),
+              const _HeaderSearch(),
             ],
-            const Spacer(),
-            if (!compact)
-              const SizedBox(
-                width: 260,
-                child: _HeaderSearch(),
-              )
-            else
-              IconButton(
-                icon: const Icon(Icons.search_rounded),
-                color: AppColors.textPrimary,
-                onPressed: () => context.go(AppRoutes.search),
-              ),
-            const SizedBox(width: 6),
-            _HeaderAction(
-              icon: Icons.person_outline_rounded,
-              label: user != null ? 'Account' : 'Sign In',
-              showLabel: !compact,
-              onTap: () => context.go(AppRoutes.profile),
-            ),
-            const SizedBox(width: 4),
-            _HeaderAction(
-              icon: Icons.shopping_cart_outlined,
-              label: 'Cart',
-              showLabel: !compact,
-              badgeCount: cartCount,
-              onTap: () => context.go(AppRoutes.cart),
-            ),
           ],
         ),
       ),
@@ -412,6 +443,10 @@ class _HeaderSearchState extends ConsumerState<_HeaderSearch> {
   }
 
   Widget _overlay() {
+    // Cap the dropdown at 340 (desktop) but shrink to fit narrow phones so it
+    // never spills past the screen edge.
+    final available = MediaQuery.sizeOf(context).width - 32;
+    final overlayWidth = available < 340 ? available : 340.0;
     return TapRegion(
       groupId: _groupId,
       child: CompositedTransformFollower(
@@ -425,7 +460,7 @@ class _HeaderSearchState extends ConsumerState<_HeaderSearch> {
             elevation: 8,
             borderRadius: BorderRadius.circular(14),
             child: Container(
-              width: 340,
+              width: overlayWidth,
               constraints: const BoxConstraints(maxHeight: 400),
               decoration: BoxDecoration(
                 color: AppColors.surface,
@@ -665,7 +700,7 @@ class StoreFooter extends StatelessWidget {
                       style: TextStyle(color: Colors.white54, fontSize: 12)),
                 ),
                 const SizedBox(width: 12),
-                Text('v1.0.0',
+                Text('v1.0.1',
                     style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.4),
                         fontSize: 11,

@@ -117,6 +117,14 @@ final deliverySettingsProvider =
   }
 });
 
+// ─── Product reviews ──────────────────────────────────────────────────────────
+final productReviewsProvider =
+    FutureProvider.autoDispose.family<List<dynamic>, String>((ref, productId) async {
+  final dio = ref.watch(dioProvider);
+  final response = await dio.get('/products/$productId/reviews');
+  return response.data as List<dynamic>;
+});
+
 // ─── Recently Viewed ──────────────────────────────────────────────────────────
 class RecentlyViewedNotifier extends StateNotifier<List<String>> {
   RecentlyViewedNotifier() : super([]);

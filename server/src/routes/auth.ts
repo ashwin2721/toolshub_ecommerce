@@ -36,9 +36,17 @@ router.post('/register', async (req, res) => {
   }
 
   try {
-    const existing = await users().findOne({ email });
+    // Enforce uniqueness on BOTH email and phone.
+    const orConds: any[] = [{ email }];
+    if (phone) orConds.push({ phone });
+    const existing = await users().findOne({ $or: orConds });
     if (existing) {
-      return res.status(400).json({ error: 'An account already exists with this email' });
+      const dupPhone = phone && existing.phone === phone && existing.email !== email;
+      return res.status(400).json({
+        error: dupPhone
+          ? 'An account already exists with this phone number'
+          : 'An account already exists with this email',
+      });
     }
 
     const userId = `user-${crypto.randomUUID()}`;
@@ -73,15 +81,18 @@ router.post('/register', async (req, res) => {
 
 // Login Endpoint
 router.post('/login', async (req, res) => {
+  // The `email` field carries the login identifier, which may be an email
+  // address OR a phone number.
   const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
+  const identifier = email;
+  if (!identifier || !password) {
+    return res.status(400).json({ error: 'Email/phone and password are required' });
   }
 
   try {
-    const user = await users().findOne({ email });
+    const user = await users().findOne({ $or: [{ email: identifier }, { phone: identifier }] });
     if (!user) {
-      return res.status(400).json({ error: 'No account found with this email' });
+      return res.status(400).json({ error: 'No account found with those details' });
     }
     if (user.is_blocked) {
       return res.status(403).json({ error: 'This account has been disabled' });

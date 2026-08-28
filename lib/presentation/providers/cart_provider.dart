@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -196,32 +197,38 @@ class CartNotifier extends StateNotifier<CartEntity> {
     await _sync();
   }
 
-  Future<bool> applyCoupon(String code) async {
-    final normalizedCode = code.toUpperCase();
-    double? discount;
-    String? type;
-
-    // Hardcode popular dev coupons
-    if (normalizedCode == 'WELCOME10') {
-      discount = 10.0;
-      type = 'percentage';
-    } else if (normalizedCode == 'SAVE200') {
-      discount = 200.0;
-      type = 'fixed';
-    } else {
-      return false;
+  /// Validates [code] against the backend (`GET /coupons/validate`) and, when
+  /// the coupon is active, stores it on the cart so the order summary picks up
+  /// the discount. Returns `null` on success or a user-facing error message.
+  Future<String?> applyCoupon(String code, Dio dio) async {
+    final normalizedCode = code.trim().toUpperCase();
+    if (normalizedCode.isEmpty) return 'Please enter a coupon code';
+    try {
+      final response = await dio.get(
+        '/coupons/validate',
+        queryParameters: {'code': normalizedCode},
+      );
+      final data = Map<String, dynamic>.from(response.data);
+      state = CartEntity(
+        userId: state.userId,
+        activeItems: state.activeItems,
+        savedItems: state.savedItems,
+        couponCode: data['code'] ?? normalizedCode,
+        couponDiscount: (data['value'] as num?)?.toDouble(),
+        couponType: data['type'],
+      );
+      await _sync();
+      return null;
+    } on DioException catch (e) {
+      final body = e.response?.data;
+      if (body is Map && body['error'] is String) {
+        return body['error'] as String;
+      }
+      if (e.response?.statusCode == 404) {
+        return 'Invalid or expired coupon code';
+      }
+      return 'Could not validate coupon. Please try again.';
     }
-
-    state = CartEntity(
-      userId: state.userId,
-      activeItems: state.activeItems,
-      savedItems: state.savedItems,
-      couponCode: normalizedCode,
-      couponDiscount: discount,
-      couponType: type,
-    );
-    await _sync();
-    return true;
   }
 
   Future<void> removeCoupon() async {

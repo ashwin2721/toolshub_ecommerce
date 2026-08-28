@@ -179,18 +179,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       style: theme.textTheme.bodyMedium),
                                   const SizedBox(height: 28),
 
-                                  // Email
+                                  // Email or Phone
                                   CustomTextField(
                                     controller: _emailCtrl,
-                                    label: 'Email Address',
-                                    hint: 'you@example.com',
-                                    keyboardType: TextInputType.emailAddress,
-                                    prefixIcon: Icons.email_outlined,
-                                    validator: (v) => v == null || v.isEmpty
-                                        ? 'Email required'
-                                        : !v.contains('@')
-                                            ? 'Invalid email'
-                                            : null,
+                                    label: 'Email or Phone Number',
+                                    hint: 'you@example.com or 9876543210',
+                                    keyboardType: TextInputType.text,
+                                    prefixIcon: Icons.person_outline,
+                                    validator: (v) => v == null || v.trim().isEmpty
+                                        ? 'Enter your email or phone number'
+                                        : null,
                                   ),
                                   const SizedBox(height: 16),
 

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import crypto from 'crypto';
-import { products, categories, banners, coupons } from '../db/mongo';
-import { authenticateToken, requireAdmin } from '../middlewares/auth';
+import { products, categories, banners, coupons, reviews, users } from '../db/mongo';
+import { authenticateToken, requireAdmin, AuthRequest } from '../middlewares/auth';
 
 const router = Router();
 
@@ -31,6 +31,7 @@ const mapProduct = (row: any) => ({
   imageUrls: row.image_urls,
   compatibleProductIds: row.compatible_product_ids,
   bulkPricing: row.bulk_pricing,
+  lowStockThreshold: row.low_stock_threshold ?? 5,
   createdAt: row.created_at,
 });
 
@@ -117,6 +118,17 @@ router.get('/products', async (req, res) => {
   }
 });
 
+// Admin product list — returns ALL products (active + inactive) so the admin
+// can see and re-enable disabled products. MUST be before '/products/:id'.
+router.get('/products/admin', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const rows = await products().find({}).sort({ created_at: -1 }).toArray();
+    res.json(rows.map(mapProduct));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 4. Get Product by ID
 router.get('/products/:id', async (req, res) => {
   try {
@@ -133,7 +145,7 @@ router.get('/products/:id', async (req, res) => {
 // 5. Add Product (Admin only)
 router.post('/products', authenticateToken, requireAdmin, async (req, res) => {
   const {
-    name, sku, description, price, discountPrice, stockQuantity,
+    name, sku, description, price, discountPrice, stockQuantity, lowStockThreshold,
     categoryId, brandId, brandName, isFeatured, isFlashSale, isNewArrival,
     features, specifications, imageUrls, compatibleProductIds, bulkPricing,
   } = req.body;
@@ -166,6 +178,7 @@ router.post('/products', authenticateToken, requireAdmin, async (req, res) => {
       price: Number(price),
       discount_price: discountPrice != null ? Number(discountPrice) : null,
       stock_quantity: stockQuantity || 0,
+      low_stock_threshold: lowStockThreshold ?? 5,
       rating: 0,
       review_count: 0,
       is_active: true,
@@ -191,7 +204,7 @@ router.post('/products', authenticateToken, requireAdmin, async (req, res) => {
 router.put('/products/:id', authenticateToken, requireAdmin, async (req, res) => {
   const { id } = req.params;
   const {
-    name, sku, description, price, discountPrice, stockQuantity,
+    name, sku, description, price, discountPrice, stockQuantity, lowStockThreshold,
     categoryId, brandId, isFeatured, isFlashSale, isNewArrival,
     features, specifications, imageUrls, compatibleProductIds, bulkPricing, isActive,
   } = req.body;
@@ -218,6 +231,7 @@ router.put('/products/:id', authenticateToken, requireAdmin, async (req, res) =>
     if (price != null) set.price = Number(price);
     if (discountPrice != null) set.discount_price = Number(discountPrice);
     if (stockQuantity !== undefined) set.stock_quantity = stockQuantity;
+    if (lowStockThreshold !== undefined) set.low_stock_threshold = lowStockThreshold;
     if (isFeatured !== undefined) set.is_featured = isFeatured;
     if (isFlashSale !== undefined) set.is_flash_sale = isFlashSale;
     if (isNewArrival !== undefined) set.is_new_arrival = isNewArrival;
@@ -357,6 +371,101 @@ router.patch('/coupons/:id', authenticateToken, requireAdmin, async (req, res) =
   try {
     await coupons().updateOne({ _id: req.params.id }, { $set: set });
     res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Product reviews ─────────────────────────────────────────────────────────
+router.get('/products/:id/reviews', async (req, res) => {
+  try {
+    const rows = await reviews()
+      .find({ product_id: req.params.id })
+      .sort({ created_at: -1 })
+      .toArray();
+    res.json(rows.map((r) => ({
+      id: r.id,
+      productId: r.product_id,
+      userId: r.user_id,
+      userName: r.user_name,
+      rating: r.rating,
+      comment: r.comment,
+      createdAt: r.created_at,
+    })));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Add a review (any signed-in user). Recomputes the product's average rating.
+router.post('/products/:id/reviews', authenticateToken, async (req: AuthRequest, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+  const rating = Number(req.body.rating);
+  const comment = (req.body.comment || '').toString();
+  if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+    return res.status(400).json({ error: 'Rating must be between 1 and 5' });
+  }
+  try {
+    const product = await products().findOne({ _id: req.params.id });
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+
+    const u = await users().findOne({ _id: req.user.id });
+    const id = `review-${crypto.randomUUID()}`;
+    await reviews().insertOne({
+      _id: id,
+      id,
+      product_id: req.params.id,
+      user_id: req.user.id,
+      user_name: u?.name || 'Customer',
+      rating,
+      comment,
+      created_at: new Date(),
+    });
+
+    // Recompute the product's average rating and review count.
+    const all = await reviews().find({ product_id: req.params.id }).toArray();
+    const count = all.length;
+    const avg = count ? all.reduce((s, x) => s + (x.rating || 0), 0) / count : 0;
+    await products().updateOne(
+      { _id: req.params.id },
+      { $set: { rating: Math.round(avg * 10) / 10, review_count: count } }
+    );
+
+    res.status(201).json({ id, message: 'Review added successfully' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// All reviews across products (Admin only) — for the admin reviews list.
+router.get('/reviews', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const rows = await reviews().find({}).sort({ created_at: -1 }).toArray();
+    const prods = await products().find({}).toArray();
+    const nameById: Record<string, string> = {};
+    for (const p of prods) nameById[p.id] = p.name;
+    res.json(rows.map((r) => ({
+      id: r.id,
+      productId: r.product_id,
+      productName: nameById[r.product_id] || r.product_id,
+      userName: r.user_name,
+      rating: r.rating,
+      comment: r.comment,
+      createdAt: r.created_at,
+    })));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Validate a promo code (public) — returns the coupon if it's active.
+router.get('/coupons/validate', async (req, res) => {
+  const code = String(req.query.code || '').toUpperCase().trim();
+  if (!code) return res.status(400).json({ error: 'Coupon code required' });
+  try {
+    const c = await coupons().findOne({ code, is_active: true });
+    if (!c) return res.status(404).json({ error: 'Invalid or expired coupon code' });
+    res.json({ valid: true, code: c.code, type: c.type, value: c.value });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

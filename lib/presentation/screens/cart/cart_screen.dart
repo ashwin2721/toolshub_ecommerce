@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../providers/cart_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/responsive.dart';
 import '../../../core/router/app_router.dart';
@@ -31,19 +32,17 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   Future<void> _applyCoupon() async {
     if (_couponCtrl.text.trim().isEmpty) return;
     setState(() => _applyingCoupon = true);
-    final ok = await ref
+    final error = await ref
         .read(cartProvider.notifier)
-        .applyCoupon(_couponCtrl.text.trim());
+        .applyCoupon(_couponCtrl.text.trim(), ref.read(dioProvider));
+    if (!mounted) return;
     setState(() => _applyingCoupon = false);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              ok ? 'Coupon applied successfully!' : 'Invalid or expired coupon'),
-          backgroundColor: ok ? AppColors.success : AppColors.error,
-        ),
-      );
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(error ?? 'Coupon applied successfully!'),
+        backgroundColor: error == null ? AppColors.success : AppColors.error,
+      ),
+    );
   }
 
   @override
@@ -52,6 +51,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final theme = Theme.of(context);
 
     return StorePage(
+      showFooter: false,
       body: MaxWidthContainer(
         verticalPadding: 24,
         child: cart.isEmpty
@@ -167,48 +167,95 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(
+            color: cart.hasCoupon ? AppColors.success : AppColors.border),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Row(
-        children: [
-          const Icon(Icons.local_offer_outlined, color: AppColors.primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: TextField(
-              controller: _couponCtrl,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-              decoration: const InputDecoration(
-                hintText: 'Enter promo coupon code',
-                border: InputBorder.none,
-                filled: false,
-                contentPadding: EdgeInsets.zero,
-              ),
-              textCapitalization: TextCapitalization.characters,
-            ),
-          ),
-          if (cart.hasCoupon)
-            IconButton(
-              icon: const Icon(Icons.cancel_rounded, color: AppColors.error),
-              onPressed: () {
-                _couponCtrl.clear();
-                ref.read(cartProvider.notifier).removeCoupon();
-              },
-            )
-          else
-            TextButton(
-              onPressed: _applyingCoupon ? null : _applyCoupon,
-              child: _applyingCoupon
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Apply',
-                      style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-        ],
-      ),
+      child: cart.hasCoupon
+          ? _appliedCoupon(theme, cart)
+          : _couponInput(theme),
     );
+  }
+
+  Widget _couponInput(ThemeData theme) {
+    return Row(
+      children: [
+        const Icon(Icons.local_offer_outlined, color: AppColors.primary),
+        const SizedBox(width: 12),
+        Expanded(
+          child: TextField(
+            controller: _couponCtrl,
+            enabled: !_applyingCoupon,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+            decoration: const InputDecoration(
+              hintText: 'Enter promo coupon code',
+              border: InputBorder.none,
+              filled: false,
+              contentPadding: EdgeInsets.zero,
+            ),
+            textCapitalization: TextCapitalization.characters,
+            onSubmitted: (_) {
+              if (!_applyingCoupon) _applyCoupon();
+            },
+          ),
+        ),
+        TextButton(
+          onPressed: _applyingCoupon ? null : _applyCoupon,
+          child: _applyingCoupon
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Apply',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+        ),
+      ],
+    );
+  }
+
+  Widget _appliedCoupon(ThemeData theme, dynamic cart) {
+    return Row(
+      children: [
+        const Icon(Icons.check_circle_rounded, color: AppColors.success),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${cart.couponCode} applied',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary)),
+              Text(_couponBenefit(cart),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                      color: AppColors.success, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+        TextButton(
+          onPressed: () {
+            _couponCtrl.clear();
+            ref.read(cartProvider.notifier).removeCoupon();
+          },
+          child: const Text('Remove',
+              style: TextStyle(
+                  fontWeight: FontWeight.bold, color: AppColors.error)),
+        ),
+      ],
+    );
+  }
+
+  String _couponBenefit(dynamic cart) {
+    switch (cart.couponType) {
+      case 'free_shipping':
+        return 'Free delivery unlocked';
+      case 'percentage':
+        return '${(cart.couponDiscount ?? 0).toStringAsFixed(0)}% off · '
+            '-₹${cart.discountAmount.toStringAsFixed(2)}';
+      default:
+        return '-₹${cart.discountAmount.toStringAsFixed(2)} off';
+    }
   }
 
   Widget _summaryCard(ThemeData theme, dynamic cart) {

@@ -7,6 +7,7 @@ import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:go_router/go_router.dart';
 import '../../providers/product_provider.dart';
 import '../../providers/cart_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/responsive.dart';
 import '../../../core/router/app_router.dart';
@@ -516,13 +517,176 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen>
                     : const Text('No specifications available',
                         style: TextStyle(color: AppColors.textSecondary)),
               ),
-              const Center(
-                  child: Text('Customer reviews coming soon',
-                      style: TextStyle(color: AppColors.textTertiary))),
+              _reviewsTabContent(),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  // ── Reviews tab: list + write-a-review ──
+  Widget _reviewsTabContent() {
+    final reviewsAsync = ref.watch(productReviewsProvider(widget.productId));
+    final user = ref.watch(currentUserProvider).valueOrNull;
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () =>
+                  user == null ? _promptSignIn() : _showWriteReviewDialog(),
+              icon: const Icon(Icons.rate_review_outlined, size: 18),
+              label: Text(
+                  user == null ? 'Sign in to write a review' : 'Write a review'),
+            ),
+          ),
+          const SizedBox(height: 12),
+          reviewsAsync.when(
+            loading: () => const Center(
+                child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: CircularProgressIndicator())),
+            error: (e, _) => const Text('Could not load reviews',
+                style: TextStyle(color: AppColors.textSecondary)),
+            data: (list) {
+              if (list.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Text('No reviews yet. Be the first to review!',
+                      style: TextStyle(color: AppColors.textSecondary)),
+                );
+              }
+              return Column(
+                children: list.map((r) {
+                  final data = r as Map<String, dynamic>;
+                  final rating = (data['rating'] as num?)?.toDouble() ?? 0;
+                  final comment = (data['comment'] ?? '').toString();
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(data['userName'] ?? 'Customer',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700, fontSize: 13)),
+                            const SizedBox(width: 8),
+                            ...List.generate(
+                                5,
+                                (i) => Icon(
+                                    i < rating
+                                        ? Icons.star_rounded
+                                        : Icons.star_outline_rounded,
+                                    size: 14,
+                                    color: AppColors.gold)),
+                          ],
+                        ),
+                        if (comment.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(comment,
+                              style:
+                                  const TextStyle(fontSize: 13, height: 1.4)),
+                        ],
+                      ],
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _promptSignIn() {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: const Text('Please sign in to write a review'),
+      action: SnackBarAction(
+        label: 'Sign In',
+        onPressed: () => context.go(
+            '${AppRoutes.login}?redirect=${Uri.encodeComponent('/product/${widget.productId}')}'),
+      ),
+    ));
+  }
+
+  void _showWriteReviewDialog() {
+    int rating = 5;
+    final commentCtrl = TextEditingController();
+    bool saving = false;
+    showDialog(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Write a Review'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(
+                    5,
+                    (i) => IconButton(
+                          onPressed: () => setLocal(() => rating = i + 1),
+                          icon: Icon(
+                              i < rating
+                                  ? Icons.star_rounded
+                                  : Icons.star_outline_rounded,
+                              color: AppColors.gold,
+                              size: 32),
+                        )),
+              ),
+              TextField(
+                controller: commentCtrl,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                    labelText: 'Your review (optional)',
+                    border: OutlineInputBorder()),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: saving ? null : () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      setLocal(() => saving = true);
+                      final messenger = ScaffoldMessenger.of(context);
+                      try {
+                        await ref.read(dioProvider).post(
+                          '/products/${widget.productId}/reviews',
+                          data: {'rating': rating, 'comment': commentCtrl.text.trim()},
+                        );
+                        ref.invalidate(productReviewsProvider(widget.productId));
+                        ref.invalidate(productDetailProvider(widget.productId));
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        messenger.showSnackBar(const SnackBar(
+                            content: Text('Thanks for your review!'),
+                            backgroundColor: AppColors.success));
+                      } catch (e) {
+                        setLocal(() => saving = false);
+                        messenger.showSnackBar(SnackBar(
+                            content: Text('Failed to submit review: $e'),
+                            backgroundColor: AppColors.error));
+                      }
+                    },
+              child: saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Submit'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
