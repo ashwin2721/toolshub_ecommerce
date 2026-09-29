@@ -206,16 +206,35 @@ async function ensureIndexes() {
 export async function connectDB() {
   const uri = process.env.MONGODB_URI;
   if (uri) {
-    try {
-      const client = new MongoClient(uri, { serverSelectionTimeoutMS: 4000 });
-      await client.connect();
-      await client.db().command({ ping: 1 });
-      db = client.db(process.env.MONGODB_DB || 'toolshub');
-      console.log('Successfully connected to MongoDB.');
-    } catch (e: any) {
+    const maxAttempts = 3;
+    let connected = false;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        console.log(`Connecting to MongoDB (attempt ${attempt}/${maxAttempts})...`);
+        const client = new MongoClient(uri, {
+          serverSelectionTimeoutMS: 25000,
+          connectTimeoutMS: 25000,
+        });
+        await client.connect();
+        await client.db().command({ ping: 1 });
+        db = client.db(process.env.MONGODB_DB || 'toolshub');
+        memory = false;
+        console.log('Successfully connected to MongoDB.');
+        connected = true;
+        break;
+      } catch (e: any) {
+        console.warn(`MongoDB connection attempt ${attempt} failed: ${e.message}`);
+        if (attempt < maxAttempts) {
+          console.log('Retrying in 2 seconds...');
+          await new Promise((r) => setTimeout(r, 2000));
+        }
+      }
+    }
+
+    if (!connected) {
       console.warn('\n================================================================');
-      console.warn('WARNING: Failed to connect to MongoDB.');
-      console.warn(`Reason: ${e.message}`);
+      console.warn('WARNING: Failed to connect to MongoDB after multiple attempts.');
       console.warn('FAILING OVER: Server will run with an IN-MEMORY store.');
       console.warn('================================================================\n');
       memory = true;

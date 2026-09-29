@@ -9,10 +9,12 @@ import '../../data/models/user_model.dart';
 final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(BaseOptions(
     baseUrl: AppConfig.current.apiBaseUrl,
-    connectTimeout: const Duration(seconds: 5),
-    receiveTimeout: const Duration(seconds: 5),
+    connectTimeout: const Duration(seconds: 45),
+    receiveTimeout: const Duration(seconds: 45),
+    sendTimeout: const Duration(seconds: 30),
   ));
 
+  // 1. Auth token injection
   dio.interceptors.add(InterceptorsWrapper(
     onRequest: (options, handler) async {
       final prefs = await SharedPreferences.getInstance();
@@ -21,6 +23,33 @@ final dioProvider = Provider<Dio>((ref) {
         options.headers['Authorization'] = 'Bearer $token';
       }
       return handler.next(options);
+    },
+  ));
+
+  // 2. Auto-retry interceptor for cold starts & temporary network jitter
+  dio.interceptors.add(InterceptorsWrapper(
+    onError: (DioException err, handler) async {
+      final isTimeoutOrNetwork =
+          err.type == DioExceptionType.connectionTimeout ||
+          err.type == DioExceptionType.receiveTimeout ||
+          err.type == DioExceptionType.connectionError;
+
+      final isGet = err.requestOptions.method.toUpperCase() == 'GET';
+      final retryCount = err.requestOptions.extra['retry_count'] as int? ?? 0;
+
+      if (isTimeoutOrNetwork && isGet && retryCount < 2) {
+        err.requestOptions.extra['retry_count'] = retryCount + 1;
+        // Wait 2 seconds before retrying (gives cold-starting server time to spin up)
+        await Future.delayed(Duration(seconds: 2 * (retryCount + 1)));
+        try {
+          final res = await dio.fetch(err.requestOptions);
+          return handler.resolve(res);
+        } on DioException catch (retryErr) {
+          return handler.next(retryErr);
+        }
+      }
+
+      return handler.next(err);
     },
   ));
 

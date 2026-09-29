@@ -24,8 +24,13 @@ final productsProvider =
     'limit': filter?.limit ?? 20,
   });
 
+  if (response.data is! List) return [];
   final List<dynamic> data = response.data;
-  return data.map((json) => ProductModel.fromMap(json, json['id'])).toList();
+  return data.map((json) {
+    final map = Map<String, dynamic>.from(json as Map);
+    final id = (map['id'] ?? map['_id'] ?? '').toString();
+    return ProductModel.fromMap(map, id);
+  }).toList();
 });
 
 // ─── Single Product Details ───────────────────────────────────────────────────
@@ -34,7 +39,10 @@ final productDetailProvider =
   final dio = ref.watch(dioProvider);
   try {
     final response = await dio.get('/products/$productId');
-    return ProductModel.fromMap(response.data, response.data['id']);
+    if (response.data == null || response.data is! Map) return null;
+    final map = Map<String, dynamic>.from(response.data as Map);
+    final id = (map['id'] ?? map['_id'] ?? productId).toString();
+    return ProductModel.fromMap(map, id);
   } on DioException catch (e) {
     if (e.response?.statusCode == 404) return null;
     rethrow;
@@ -47,8 +55,13 @@ final searchResultsProvider =
   if (query.isEmpty) return [];
   final dio = ref.watch(dioProvider);
   final response = await dio.get('/products', queryParameters: {'q': query});
+  if (response.data is! List) return [];
   final List<dynamic> data = response.data;
-  return data.map((json) => ProductModel.fromMap(json, json['id'])).toList();
+  return data.map((json) {
+    final map = Map<String, dynamic>.from(json as Map);
+    final id = (map['id'] ?? map['_id'] ?? '').toString();
+    return ProductModel.fromMap(map, id);
+  }).toList();
 });
 
 // ─── Compatible Accessories ───────────────────────────────────────────────────

@@ -19,31 +19,48 @@ import 'app_logo.dart';
 class StorePage extends StatelessWidget {
   final Widget body;
   final bool showFooter;
+  final Future<void> Function()? onRefresh;
 
   // Footer shows only where explicitly enabled (the Home page). Every other
   // page — search, cart, profile and its sub-pages, admin, etc. — omits it.
-  const StorePage({super.key, required this.body, this.showFooter = false});
+  const StorePage({
+    super.key,
+    required this.body,
+    this.showFooter = false,
+    this.onRefresh,
+  });
 
   @override
   Widget build(BuildContext context) {
+    Widget scrollable = SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: BouncingScrollPhysics(),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          body,
+          if (showFooter) const StoreFooter(),
+        ],
+      ),
+    );
+
+    if (onRefresh != null) {
+      scrollable = RefreshIndicator(
+        color: AppColors.primary,
+        backgroundColor: Colors.white,
+        onRefresh: onRefresh!,
+        child: scrollable,
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Column(
         children: [
           const StoreAnnouncementBar(),
           const StoreHeader(),
-          Expanded(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  body,
-                  if (showFooter) const StoreFooter(),
-                ],
-              ),
-            ),
-          ),
+          Expanded(child: scrollable),
         ],
       ),
     );
@@ -56,7 +73,6 @@ class StoreAnnouncementBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final mobile = context.isMobile;
     final settings =
         ref.watch(storeSettingsProvider).valueOrNull ?? const <String, dynamic>{};
     final t = (settings['announcementText'] as String?)?.trim();
@@ -70,14 +86,9 @@ class StoreAnnouncementBar extends ConsumerWidget {
       child: MaxWidthContainer(
         verticalPadding: 9,
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (!mobile) ...[
-              const Icon(Icons.call_outlined, size: 14, color: Colors.white70),
-              const SizedBox(width: 6),
-              const Text('+00 123 456 7890',
-                  style: TextStyle(color: Colors.white70, fontSize: 12)),
-            ],
-            Expanded(
+            Flexible(
               child: Wrap(
                 alignment: WrapAlignment.center,
                 crossAxisAlignment: WrapCrossAlignment.center,
@@ -99,31 +110,9 @@ class StoreAnnouncementBar extends ConsumerWidget {
                 ],
               ),
             ),
-            if (!mobile) ...[
-              const _MiniDropdown(label: 'Eng'),
-              const SizedBox(width: 18),
-              const _MiniDropdown(label: 'Location'),
-            ],
           ],
         ),
       ),
-    );
-  }
-}
-
-class _MiniDropdown extends StatelessWidget {
-  final String label;
-  const _MiniDropdown({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-        const Icon(Icons.keyboard_arrow_down_rounded,
-            size: 16, color: Colors.white70),
-      ],
     );
   }
 }

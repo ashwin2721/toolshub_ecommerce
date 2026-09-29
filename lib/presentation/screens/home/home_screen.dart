@@ -122,6 +122,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return StorePage(
       showFooter: true,
+      onRefresh: () async {
+        ref.invalidate(productsProvider);
+        ref.invalidate(categoriesProvider);
+        ref.invalidate(storeSettingsProvider);
+        try {
+          await ref.read(productsProvider(const ProductFilter(limit: 60)).future);
+        } catch (_) {}
+      },
       body: MaxWidthContainer(
         verticalPadding: 24,
         child: Column(
@@ -181,7 +189,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 );
               },
               loading: () => const _GridShimmer(),
-              error: (_, __) => const _EmptyGrid(),
+              error: (err, stack) => _HomeErrorState(
+                error: err,
+                onRetry: () {
+                  ref.invalidate(productsProvider);
+                  ref.invalidate(categoriesProvider);
+                  ref.invalidate(storeSettingsProvider);
+                },
+              ),
             ),
             const SizedBox(height: 12),
           ],
@@ -775,6 +790,74 @@ class _EmptyGrid extends StatelessWidget {
           SizedBox(height: 12),
           Text('No products to show yet',
               style: TextStyle(color: AppColors.textSecondary)),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeErrorState extends StatelessWidget {
+  final Object error;
+  final VoidCallback onRetry;
+
+  const _HomeErrorState({required this.error, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 54, horizontal: 24),
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.cloud_off_rounded,
+              size: 44,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Unable to Load Products',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+          ),
+          const SizedBox(height: 8),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: const Text(
+              'The server might still be starting up or experienced a connection timeout. Tap below to reconnect.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 14,
+                height: 1.4,
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: const Text('Retry Connection',
+                style: TextStyle(fontWeight: FontWeight.w700)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
         ],
       ),
     );
