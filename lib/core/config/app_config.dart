@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 enum AppEnvironment {
   dev,
   prod,
@@ -15,21 +17,23 @@ class AppConfig {
   });
 
   static AppConfig get current {
-    const flavor = String.fromEnvironment('FLAVOR', defaultValue: 'dev');
+    const defaultFlavor = kReleaseMode ? 'prod' : 'dev';
+    const flavor = String.fromEnvironment('FLAVOR', defaultValue: defaultFlavor);
     switch (flavor) {
-      case 'prod':
-        return AppConfig(
-          appTitle: 'ToolsHub',
-          apiBaseUrl: 'https://toolshub-ecommerce.onrender.com/api',
-          environment: AppEnvironment.prod,
-        );
       case 'dev':
-      default:
         return AppConfig(
           appTitle: 'ToolsHub Dev',
           apiBaseUrl: 'http://localhost:5005/api',
           environment: AppEnvironment.dev,
         );
+      case 'prod':
+      default:
+        return AppConfig(
+          appTitle: 'ToolsHub',
+          apiBaseUrl: 'https://toolshub-ecommerce.onrender.com/api',
+          environment: AppEnvironment.prod,
+        );
     }
   }
 }
+

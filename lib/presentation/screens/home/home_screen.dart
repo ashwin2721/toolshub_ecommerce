@@ -195,6 +195,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ref.invalidate(productsProvider);
                   ref.invalidate(categoriesProvider);
                   ref.invalidate(storeSettingsProvider);
+                  ref.refresh(productsProvider(const ProductFilter(limit: 60)));
+                  ref.refresh(categoriesProvider);
                 },
               ),
             ),
