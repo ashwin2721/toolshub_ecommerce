@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
 import '../../providers/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/brand/brand.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/utils/location_helper.dart';
 import '../../widgets/common/custom_button.dart';
@@ -214,12 +215,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Create Account 🛠️',
+                          Text('Create Account ${Brand.current.copy.emoji}',
                               style: theme.textTheme.headlineSmall?.copyWith(
                                   fontWeight: FontWeight.w800,
                                   color: isDark ? Colors.white : AppColors.secondary)),
                           const SizedBox(height: 4),
-                          Text('Join TOOLSHUB and shop the best tools',
+                          Text(Brand.current.copy.registerPitch,
                               style: theme.textTheme.bodyMedium),
                         ],
                       ),

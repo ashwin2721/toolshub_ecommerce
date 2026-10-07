@@ -4,6 +4,7 @@ import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/brand/brand.dart';
 
 class HeroBannerSlider extends StatefulWidget {
   final List<Map<String, dynamic>> banners;
@@ -121,7 +122,8 @@ class _BannerCard extends StatelessWidget {
                 errorWidget: (_, __, ___) => Container(
                   color: AppColors.primary,
                   child: Center(
-                    child: Text(banner['title'] ?? 'TOOLSHUB',
+                    child: Text(
+                        banner['title'] ?? Brand.current.wordmark,
                         style: theme.textTheme.titleLarge?.copyWith(
                             color: Colors.white, fontWeight: FontWeight.w700)),
                   ),

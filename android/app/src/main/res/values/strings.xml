@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fallback only. Each brand flavour overrides this in
+         src/<flavor>/res/values/strings.xml. Kept so the IDE manifest
+         preview and lint resolve with no variant selected. -->
+    <string name="app_name">Apex Deals</string>
+</resources>

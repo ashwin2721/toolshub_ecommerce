@@ -8,44 +8,44 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
 
   <!-- Primary meta tags -->
-  <meta name="description" content="Shop professional-grade power tools, hand tools, and hardware at ToolsHub. Top brands, pro-grade gear, fast delivery, and unbeatable deals.">
-  <meta name="keywords" content="tools, power tools, hand tools, hardware, drills, saws, workshop, ToolsHub, tools online, professional tools">
-  <meta name="author" content="ToolsHub">
-  <meta name="theme-color" content="#1A1A1A">
-  <link rel="canonical" href="https://toolshub.app/">
+  <meta name="description" content="{{BRAND_DESC}}">
+  <meta name="keywords" content="{{BRAND_KEYWORDS}}">
+  <meta name="author" content="{{BRAND_NAME}}">
+  <meta name="theme-color" content="{{BRAND_THEME}}">
+  <link rel="canonical" href="{{BRAND_URL}}">
 
   <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="ToolsHub">
-  <meta property="og:title" content="ToolsHub — Professional Tools & Hardware Store">
-  <meta property="og:description" content="Shop professional-grade power tools, hand tools, and hardware. Top brands, pro-grade gear, fast delivery, and unbeatable deals.">
-  <meta property="og:url" content="https://toolshub.app/">
-  <meta property="og:image" content="icons/Icon-512.png">
+  <meta property="og:site_name" content="{{BRAND_NAME}}">
+  <meta property="og:title" content="{{BRAND_TITLE}}">
+  <meta property="og:description" content="{{BRAND_DESC}}">
+  <meta property="og:url" content="{{BRAND_URL}}">
+  <meta property="og:image" content="brand/{{BRAND_ID}}/icons/Icon-512.png">
   <meta property="og:image:width" content="512">
   <meta property="og:image:height" content="512">
-  <meta property="og:image:alt" content="ToolsHub — Professional Tools & Hardware">
+  <meta property="og:image:alt" content="{{BRAND_NAME}} — {{BRAND_TAGLINE}}">
   <meta property="og:locale" content="en_US">
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="ToolsHub — Professional Tools & Hardware Store">
-  <meta name="twitter:description" content="Shop professional-grade power tools, hand tools, and hardware. Top brands, pro-grade gear, fast delivery, and unbeatable deals.">
-  <meta name="twitter:image" content="icons/Icon-512.png">
-  <meta name="twitter:image:alt" content="ToolsHub — Professional Tools & Hardware">
+  <meta name="twitter:title" content="{{BRAND_TITLE}}">
+  <meta name="twitter:description" content="{{BRAND_DESC}}">
+  <meta name="twitter:image" content="brand/{{BRAND_ID}}/icons/Icon-512.png">
+  <meta name="twitter:image:alt" content="{{BRAND_NAME}} — {{BRAND_TAGLINE}}">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="ToolsHub">
-  <meta name="application-name" content="ToolsHub">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <meta name="apple-mobile-web-app-title" content="{{BRAND_NAME}}">
+  <meta name="application-name" content="{{BRAND_NAME}}">
+  <link rel="apple-touch-icon" href="brand/{{BRAND_ID}}/icons/Icon-192.png">
 
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <link rel="icon" type="image/png" href="brand/{{BRAND_ID}}/favicon.png"/>
 
-  <title>ToolsHub — Professional Tools & Hardware</title>
-  <link rel="manifest" href="manifest.json">
+  <title>{{BRAND_TITLE}}</title>
+  <link rel="manifest" href="brand/{{BRAND_ID}}/manifest.json">
 
   <style>
     #th-splash {
@@ -56,7 +56,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(135deg, #1A1A1A 0%, #333333 100%);
+      background: linear-gradient(135deg, {{BRAND_THEME}} 0%, {{BRAND_SPLASH_TO}} 100%);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       transition: opacity .45s ease;
     }
@@ -71,7 +71,7 @@
       box-shadow: 0 14px 40px rgba(0, 0, 0, .4);
       animation: th-pop .6s cubic-bezier(.2,.8,.2,1);
     }
-    #th-splash .logo svg { width: 48px; height: 48px; fill: #1A1A1A; }
+    #th-splash .logo img { width: 48px; height: 48px; }
     #th-splash .brand {
       color: #fff;
       font-size: 30px;
@@ -104,12 +104,10 @@
 <body>
   <div id="th-splash">
     <div class="logo">
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/>
-      </svg>
+      <img src="brand/{{BRAND_ID}}/logo.svg" alt="" width="48" height="48">
     </div>
-    <div class="brand">TOOLSHUB</div>
-    <div class="tag">Professional Tools &amp; Hardware</div>
+    <div class="brand">{{BRAND_WORDMARK}}</div>
+    <div class="tag">{{BRAND_TAGLINE}}</div>
     <div class="ring"></div>
   </div>
 

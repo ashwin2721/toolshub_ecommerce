@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/brand/brand.dart';
 import '../../../core/responsive.dart';
 import '../../../core/router/app_router.dart';
 import '../../../domain/entities/product_entity.dart';
@@ -48,8 +49,7 @@ class _GeminiAssistantScreenState extends ConsumerState<GeminiAssistantScreen> {
     super.initState();
     // Add welcome message
     _messages.add(ChatMessage(
-      text: "Hello! I am your TOOLSHUB Project Assistant.\n\n"
-          "Describe your construction or home improvement project (e.g. 'I need to mount a TV' or 'drywall partition installation'), and I will suggest the exact tools and materials you'll need, with direct links to add them to your cart!",
+      text: Brand.current.copy.assistantGreeting,
       isUser: false,
     ));
   }

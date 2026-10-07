@@ -12,6 +12,9 @@
 // Until both are filled in, the "Upload Image" buttons show a friendly notice.
 
 const String kCloudinaryCloudName = 'm0bsfqj5';
+// Intentionally shared across brands: this is an unsigned upload bucket for
+// admin product images, never customer-visible, and splitting it per brand
+// would buy nothing. Revisit only if asset separation is actually required.
 const String kCloudinaryUploadPreset = 'toolshub';
 
 bool get kCloudinaryConfigured =>

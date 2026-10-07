@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/brand/brand.dart';
 import '../../../core/responsive.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/constants/app_constants.dart';
@@ -282,7 +283,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           const SizedBox(height: 16),
           _SummaryRow('Subtotal', '₹${cart.subtotal.toStringAsFixed(2)}'),
           if (cart.totalBulkDiscountSaved > 0)
-            _SummaryRow('Contractor Bulk Savings',
+            _SummaryRow(
+                '${Brand.current.copy.bulkPricingLabel} Savings',
                 '-₹${cart.totalBulkDiscountSaved.toStringAsFixed(2)}',
                 color: AppColors.success, isBold: true),
           if (cart.hasCoupon)
@@ -519,7 +521,8 @@ class _CartItem extends StatelessWidget {
                           color: AppColors.success.withValues(alpha: 0.15)),
                     ),
                     child: Text(
-                      '${(item.bulkDiscountPercent * 100).toStringAsFixed(0)}% Contractor Bulk Discount Applied',
+                      '${(item.bulkDiscountPercent * 100).toStringAsFixed(0)}%'
+                      ' ${Brand.current.copy.bulkPricingLabel} Discount Applied',
                       style: const TextStyle(
                         color: AppColors.success,
                         fontSize: 9,

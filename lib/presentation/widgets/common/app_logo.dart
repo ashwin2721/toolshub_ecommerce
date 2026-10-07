@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/brand_colors.dart';
+import '../../../core/brand/brand.dart';
 
 class AppLogo extends StatelessWidget {
   final double size;
@@ -13,11 +15,11 @@ class AppLogo extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: white ? Colors.white : AppColors.primary,
+        color: white ? Colors.white : BrandColors.accent,
         borderRadius: BorderRadius.circular(size * 0.22),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.3),
+            color: BrandColors.accent.withValues(alpha: 0.3),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -25,9 +27,9 @@ class AppLogo extends StatelessWidget {
       ),
       child: Center(
         child: Icon(
-          Icons.handyman_rounded,
+          Brand.current.markIcon,
           size: size * 0.55,
-          color: white ? AppColors.primary : Colors.white,
+          color: white ? BrandColors.accent : BrandColors.onAccent,
         ),
       ),
     );

@@ -1,5 +1,33 @@
+import '../brand/brand.dart';
+
 class FuzzySearchHelper {
-  static const Map<String, String> corrections = {
+  /// The active dictionary. Tool brands are meaningless in a general
+  /// storefront, so each brand gets the list that matches its catalogue.
+  static Map<String, String> get corrections =>
+      Brand.current.flags.toolBrandTypoDictionary
+          ? _toolCorrections
+          : _genericCorrections;
+
+  /// Common misspellings of general-merchandise terms.
+  static const Map<String, String> _genericCorrections = {
+    'headphone': 'headphones',
+    'headfone': 'headphones',
+    'hedphones': 'headphones',
+    'mobil': 'mobile',
+    'moble': 'mobile',
+    'labtop': 'laptop',
+    'laptap': 'laptop',
+    'watche': 'watch',
+    'wach': 'watch',
+    'speeker': 'speaker',
+    'spekar': 'speaker',
+    'chargar': 'charger',
+    'charjer': 'charger',
+    'bluetooh': 'bluetooth',
+    'blutooth': 'bluetooth',
+  };
+
+  static const Map<String, String> _toolCorrections = {
     'maketa': 'makita',
     'macketa': 'makita',
     'macta': 'makita',

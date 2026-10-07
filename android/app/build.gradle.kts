@@ -20,8 +20,9 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.toolshub.toolshub"
+        // No applicationId here on purpose: each brand flavour sets its
+        // own, so a build that somehow selects no flavour fails loudly
+        // instead of shipping under the wrong id.
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 23
@@ -30,15 +31,25 @@ android {
         versionName = flutter.versionName
     }
 
-    flavorDimensions.add("default")
+    // One dimension: brand. Environment (which backend) is a --dart-define,
+    // not a flavour, because `flutter build web` has no --flavor flag at all
+    // - an environment expressed as a Gradle flavour would be unreachable on
+    // the web target.
+    //
+    // `namespace` above deliberately stays com.toolshub.toolshub: it has to
+    // match the Kotlin package of MainActivity, and AGP has no per-flavour
+    // namespace. Only applicationId varies, which is what the Play Store and
+    // the launcher actually see.
+    flavorDimensions += "brand"
 
     productFlavors {
-        create("dev") {
-            dimension = "default"
-            applicationIdSuffix = ".dev"
+        create("apexdeals") {
+            dimension = "brand"
+            applicationId = "com.apexdeals.app"
         }
-        create("prod") {
-            dimension = "default"
+        create("toolshub") {
+            dimension = "brand"
+            applicationId = "com.toolshub.app"
         }
     }
 

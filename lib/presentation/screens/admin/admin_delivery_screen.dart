@@ -6,6 +6,7 @@ import '../../providers/product_provider.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/brand/brand.dart';
 import '../../../core/utils/location_helper.dart';
 
 /// Admin editor for the distance-based delivery-fee engine.
@@ -391,7 +392,9 @@ class _AdminDeliveryScreenState extends ConsumerState<AdminDeliveryScreen> {
               children: [
                 TileLayer(
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.toolshub.app',
+                  // OSM tile usage policy asks for an identifying UA. Matches
+                  // the bundle id each brand actually ships under.
+                  userAgentPackageName: 'com.${Brand.current.key}.app',
                 ),
                 MarkerLayer(
                   markers: [

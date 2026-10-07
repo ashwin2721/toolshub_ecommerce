@@ -5,6 +5,8 @@ import 'package:shimmer/shimmer.dart';
 import '../../providers/product_provider.dart';
 import '../../../domain/entities/product_entity.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/brand_colors.dart';
+import '../../../core/brand/brand.dart';
 import '../../../core/responsive.dart';
 import '../../../core/router/app_router.dart';
 import '../../widgets/common/store_chrome.dart';
@@ -150,7 +152,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               }),
             ),
             const SizedBox(height: 26),
-            Text('Tools For You!',
+            Text(Brand.current.copy.forYouHeading,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w800,
                       color: AppColors.textPrimary,
@@ -221,7 +223,7 @@ class _StoreHero extends ConsumerWidget {
     final rawTitle = (settings['heroTitle'] as String?)?.trim() ?? '';
     final title = rawTitle.isNotEmpty
         ? rawTitle
-        : 'Grab Upto 50% Off On Selected Power Tools';
+        : Brand.current.copy.heroTitleFallback;
     final subtitle = (settings['heroSubtitle'] as String?)?.trim() ?? '';
     final rawCta = (settings['heroCtaLabel'] as String?)?.trim() ?? '';
     final ctaLabel = rawCta.isNotEmpty ? rawCta : 'Buy Now';
@@ -271,7 +273,7 @@ class _StoreHero extends ConsumerWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: AppColors.heroBackground,
+        color: BrandColors.heroSurface,
         borderRadius: BorderRadius.circular(20),
       ),
       padding: EdgeInsets.symmetric(
@@ -323,7 +325,7 @@ class _FilterBar extends ConsumerWidget {
       ..sort();
 
     final toolTypeOptions = <(String, String)>[
-      ('All Tools', ''),
+      (Brand.current.copy.allCategoriesLabel, ''),
       for (final c in categories) (c.name, c.id),
     ];
     final brandOptions = <(String, String)>[
@@ -361,7 +363,7 @@ class _FilterBar extends ConsumerWidget {
             runSpacing: 10,
             children: [
               _MenuPill<String>(
-                base: 'Tool Type',
+                base: Brand.current.copy.categoryFilterLabel,
                 selected: filters.categoryId,
                 options: toolTypeOptions,
                 onSelected: (v) => onFiltersChanged(filters.copyWith(categoryId: v)),

@@ -72,6 +72,9 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   generate: true
+  # Makes a bare `flutter run` build Apex Deals rather than erroring out
+  # because flavours exist but none was selected.
+  default-flavor: apexdeals
 
   assets:
     - assets/images/

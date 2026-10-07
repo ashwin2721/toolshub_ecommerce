@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/product_provider.dart';
 import '../../providers/app_provider.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/brand/brand.dart';
 import '../../../core/responsive.dart';
 import '../../../core/utils/fuzzy_search_helper.dart';
 import '../../widgets/common/store_chrome.dart';
@@ -99,11 +100,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       // Search live as the user types; save to history on submit.
                       onChanged: (v) => setState(() => _query = v.trim()),
                       onSubmitted: _onSearch,
-                      decoration: const InputDecoration(
-                        hintText: 'Search tools, brands, categories...',
+                      decoration: InputDecoration(
+                        hintText: Brand.current.copy.searchHint,
                         filled: false,
                         isCollapsed: true,
-                        contentPadding: EdgeInsets.symmetric(vertical: 4),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 4),
                         border: InputBorder.none,
                         enabledBorder: InputBorder.none,
                         focusedBorder: InputBorder.none,

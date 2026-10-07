@@ -1,0 +1,89 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Apex Deals · dev",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "flutterMode": "debug",
+      "args": ["--flavor", "apexdeals", "--web-port", "8080"],
+      "toolArgs": [
+        "--dart-define=ENV=dev",
+        "--web-define=BRAND_ID=apexdeals",
+        "--web-define=BRAND_NAME=Apex Deals",
+        "--web-define=BRAND_WORDMARK=APEX DEALS",
+        "--web-define=BRAND_TITLE=Apex Deals — Everyday Deals, Delivered Fast",
+        "--web-define=BRAND_TAGLINE=Everyday Deals, Delivered Fast",
+        "--web-define=BRAND_DESC=Shop everyday essentials and standout offers at Apex Deals. Great brands, great prices, fast delivery.",
+        "--web-define=BRAND_KEYWORDS=deals, offers, online shopping, discounts, Apex Deals, best prices, everyday essentials",
+        "--web-define=BRAND_URL=https://apexdeals.app/",
+        "--web-define=BRAND_THEME=#1A1A1A",
+        "--web-define=BRAND_SPLASH_TO=#333333"
+      ]
+    },
+    {
+      "name": "Apex Deals · prod",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "flutterMode": "debug",
+      "args": ["--flavor", "apexdeals", "--web-port", "8080"],
+      "toolArgs": [
+        "--dart-define=ENV=prod",
+        "--web-define=BRAND_ID=apexdeals",
+        "--web-define=BRAND_NAME=Apex Deals",
+        "--web-define=BRAND_WORDMARK=APEX DEALS",
+        "--web-define=BRAND_TITLE=Apex Deals — Everyday Deals, Delivered Fast",
+        "--web-define=BRAND_TAGLINE=Everyday Deals, Delivered Fast",
+        "--web-define=BRAND_DESC=Shop everyday essentials and standout offers at Apex Deals. Great brands, great prices, fast delivery.",
+        "--web-define=BRAND_KEYWORDS=deals, offers, online shopping, discounts, Apex Deals, best prices, everyday essentials",
+        "--web-define=BRAND_URL=https://apexdeals.app/",
+        "--web-define=BRAND_THEME=#1A1A1A",
+        "--web-define=BRAND_SPLASH_TO=#333333"
+      ]
+    },
+    {
+      "name": "ToolsHub · dev",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_toolshub.dart",
+      "flutterMode": "debug",
+      "args": ["--flavor", "toolshub", "--web-port", "8081"],
+      "toolArgs": [
+        "--dart-define=ENV=dev",
+        "--web-define=BRAND_ID=toolshub",
+        "--web-define=BRAND_NAME=ToolsHub",
+        "--web-define=BRAND_WORDMARK=TOOLSHUB",
+        "--web-define=BRAND_TITLE=ToolsHub — Professional Tools & Hardware Store",
+        "--web-define=BRAND_TAGLINE=Professional Tools & Hardware",
+        "--web-define=BRAND_DESC=Shop professional-grade power tools, hand tools, and hardware at ToolsHub. Top brands, pro-grade gear, fast delivery, and unbeatable deals.",
+        "--web-define=BRAND_KEYWORDS=tools, power tools, hand tools, hardware, drills, saws, workshop, ToolsHub, tools online, professional tools",
+        "--web-define=BRAND_URL=https://toolshub.app/",
+        "--web-define=BRAND_THEME=#1A1A1A",
+        "--web-define=BRAND_SPLASH_TO=#333333"
+      ]
+    },
+    {
+      "name": "ToolsHub · prod",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_toolshub.dart",
+      "flutterMode": "debug",
+      "args": ["--flavor", "toolshub", "--web-port", "8081"],
+      "toolArgs": [
+        "--dart-define=ENV=prod",
+        "--web-define=BRAND_ID=toolshub",
+        "--web-define=BRAND_NAME=ToolsHub",
+        "--web-define=BRAND_WORDMARK=TOOLSHUB",
+        "--web-define=BRAND_TITLE=ToolsHub — Professional Tools & Hardware Store",
+        "--web-define=BRAND_TAGLINE=Professional Tools & Hardware",
+        "--web-define=BRAND_DESC=Shop professional-grade power tools, hand tools, and hardware at ToolsHub. Top brands, pro-grade gear, fast delivery, and unbeatable deals.",
+        "--web-define=BRAND_KEYWORDS=tools, power tools, hand tools, hardware, drills, saws, workshop, ToolsHub, tools online, professional tools",
+        "--web-define=BRAND_URL=https://toolshub.app/",
+        "--web-define=BRAND_THEME=#1A1A1A",
+        "--web-define=BRAND_SPLASH_TO=#333333"
+      ]
+    }
+  ]
+}

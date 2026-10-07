@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
 import '../../providers/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/brand/brand.dart';
 import '../../../core/router/app_router.dart';
 import '../../widgets/common/custom_button.dart';
 import '../../widgets/common/custom_text_field.dart';
@@ -127,7 +128,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           const AppLogo(size: 68),
                           const SizedBox(height: 12),
                           Text(
-                            'TOOLSHUB',
+                            Brand.current.wordmark,
                             style: theme.textTheme.headlineMedium?.copyWith(
                               color: isDark ? Colors.white : AppColors.secondary,
                               fontWeight: FontWeight.w800,
@@ -135,7 +136,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                           ),
                           Text(
-                            'Professional Tools & Hardware',
+                            Brand.current.copy.tagline,
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: isDark ? Colors.white70 : AppColors.textSecondary,
                             ),

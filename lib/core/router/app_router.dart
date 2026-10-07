@@ -30,6 +30,7 @@ import '../../presentation/screens/admin/admin_content_screen.dart';
 import '../../presentation/screens/admin/admin_delivery_screen.dart';
 import '../../presentation/screens/admin/admin_reviews_screen.dart';
 import '../../presentation/providers/auth_provider.dart';
+import '../brand/brand.dart';
 
 class AppRoutes {
   AppRoutes._();
@@ -208,9 +209,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
           path: AppRoutes.supportTicket,
           builder: (c, s) => const SupportTicketScreen()),
-      GoRoute(
-          path: AppRoutes.toolServiceBooking,
-          builder: (c, s) => const ToolServiceBookingScreen()),
+      if (Brand.current.flags.toolServiceBooking)
+        GoRoute(
+            path: AppRoutes.toolServiceBooking,
+            builder: (c, s) => const ToolServiceBookingScreen())
+      else
+        GoRoute(
+            path: AppRoutes.toolServiceBooking,
+            redirect: (_, __) => AppRoutes.supportTicket),
       GoRoute(
           path: AppRoutes.aiAssistant,
           builder: (c, s) => const GeminiAssistantScreen()),

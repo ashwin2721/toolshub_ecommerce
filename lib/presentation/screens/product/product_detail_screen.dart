@@ -13,6 +13,7 @@ import '../../../core/responsive.dart';
 import '../../../core/router/app_router.dart';
 import '../../../domain/entities/product_entity.dart';
 import '../../../core/utils/external_link_helper.dart';
+import '../../../core/brand/brand.dart';
 import '../../widgets/common/app_logo.dart';
 import '../../widgets/common/store_chrome.dart';
 import '../../widgets/product/product_card.dart';
@@ -977,7 +978,7 @@ class _BulkPricingCard extends StatelessWidget {
                     color: AppColors.primary, size: 18),
                 const SizedBox(width: 8),
                 Text(
-                  'Contractor Bulk Pricing Tiers',
+                  '${Brand.current.copy.bulkPricingLabel} Pricing Tiers',
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w800,
                     color: AppColors.primary,

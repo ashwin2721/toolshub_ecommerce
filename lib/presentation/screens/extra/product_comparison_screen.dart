@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/brand_colors.dart';
+import '../../../core/brand/brand.dart';
 import '../../../core/responsive.dart';
 import '../../../core/router/app_router.dart';
 import '../../../domain/entities/product_entity.dart';
@@ -615,7 +617,8 @@ class _SupportTicketScreenState extends ConsumerState<SupportTicketScreen> {
 class FaqScreen extends StatelessWidget {
   const FaqScreen({super.key});
 
-  static const _faqs = [
+  // No longer const: the support address is brand-specific.
+  static List<(String, String)> get _faqs => [
     ('How do I track my order?', 'Go to My Orders → Order Details → Track Order to see live status updates.'),
     ('What is the return policy?', 'We offer 7-day easy returns on most products. Contact support to initiate.'),
     ('Which payment methods are accepted?', 'We accept Razorpay (cards/UPI/netbanking), Stripe, PayPal, UPI, and Cash on Delivery.'),
@@ -623,7 +626,8 @@ class FaqScreen extends StatelessWidget {
     ('Is GST invoice available?', 'Yes! You can download a GST invoice from your order details page.'),
     ('How do I apply a coupon?', 'Go to Cart → enter your coupon code and click Apply.'),
     ('Can I cancel my order?', 'Orders can be cancelled before they are shipped. Go to Order Details → Cancel Order.'),
-    ('How do I contact support?', 'Use the Support Ticket system or email us at support@toolshub.com'),
+    ('How do I contact support?',
+        'Use the Support Ticket system or email us at ${Brand.current.supportEmail}'),
   ];
 
   @override
@@ -715,11 +719,12 @@ class ContactScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             ...[
-              (Icons.email_outlined, 'Email', 'support@toolshub.com'),
-              (Icons.phone_outlined, 'Phone', '+91 1800-XXX-XXXX'),
+              (Icons.email_outlined, 'Email', Brand.current.supportEmail),
+              (Icons.phone_outlined, 'Phone', Brand.current.supportPhone),
               (Icons.location_on_outlined, 'Address',
-                  '123, Industrial Area, Mumbai - 400001'),
-              (Icons.access_time_outlined, 'Hours', 'Mon-Sat: 9AM to 6PM IST'),
+                  Brand.current.postalAddress),
+              (Icons.access_time_outlined, 'Hours',
+                  Brand.current.businessHours),
             ].map((item) => ListTile(
                   leading: Container(
                     padding: const EdgeInsets.all(8),
@@ -754,7 +759,7 @@ class AboutScreen extends StatelessWidget {
           children: [
             const _BackLink(),
             Text(
-              'About TOOLSHUB',
+              'About ${Brand.current.displayName}',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w800,
                     color: AppColors.textPrimary,
@@ -770,20 +775,20 @@ class AboutScreen extends StatelessWidget {
                     decoration: BoxDecoration(
                         color: AppColors.primary,
                         borderRadius: BorderRadius.circular(20)),
-                    child: const Center(
-                      child: Icon(Icons.handyman_outlined,
-                          size: 40, color: Colors.white),
+                    child: Center(
+                      child: Icon(Brand.current.markIcon,
+                          size: 40, color: BrandColors.onAccent),
                     ),
                   ),
                   const SizedBox(height: 12),
-                  const Text('TOOLSHUB',
-                      style: TextStyle(
+                  Text(Brand.current.wordmark,
+                      style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 2,
                           color: AppColors.primary)),
-                  const Text('Professional Tools & Hardware Store',
-                      style: TextStyle(color: AppColors.textSecondary)),
+                  Text(Brand.current.copy.tagline,
+                      style: const TextStyle(color: AppColors.textSecondary)),
                   const SizedBox(height: 4),
                   const Text('Version 1.0.0',
                       style: TextStyle(
@@ -795,9 +800,10 @@ class AboutScreen extends StatelessWidget {
             const Text('About Us',
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
             const SizedBox(height: 8),
-            const Text(
-              'TOOLSHUB is India\'s leading online marketplace for professional tools, hardware, and equipment. We serve millions of professionals, craftsmen, and DIY enthusiasts across the country.\n\nOur commitment is to provide the highest quality tools from top brands at the best prices, backed by excellent customer service.',
-              style: TextStyle(color: AppColors.textSecondary, height: 1.6),
+            Text(
+              Brand.current.copy.aboutBlurb,
+              style: const TextStyle(
+                  color: AppColors.textSecondary, height: 1.6),
             ),
             const SizedBox(height: 24),
             const Row(
@@ -862,7 +868,8 @@ class PrivacyPolicyScreen extends StatelessWidget {
               ('How We Use Your Information', 'Your information is used to process orders, provide customer support, send order updates, and improve our services.'),
               ('Data Security', 'We use industry-standard encryption (SSL/TLS) to protect your data. Payment information is processed through secure third-party gateways.'),
               ('Cookies', 'We use cookies to enhance your experience, remember preferences, and analyze traffic. You can disable cookies in your browser settings.'),
-              ('Contact', 'For privacy concerns, email us at privacy@toolshub.com'),
+              ('Contact',
+                  'For privacy concerns, email us at ${Brand.current.privacyEmail}'),
             ].map((section) => Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -900,15 +907,18 @@ class TermsScreen extends StatelessWidget {
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
             const SizedBox(height: 8),
-            const Text('By using TOOLSHUB, you agree to these terms.',
-                style: TextStyle(color: AppColors.textSecondary)),
+            Text(
+                'By using ${Brand.current.displayName}, you agree to these terms.',
+                style: const TextStyle(color: AppColors.textSecondary)),
             const SizedBox(height: 16),
             ...[
               ('1. Account', 'You must be 18+ to create an account. You are responsible for maintaining account confidentiality.'),
               ('2. Orders', 'Orders are subject to product availability. We reserve the right to cancel orders due to pricing errors.'),
               ('3. Returns', '7-day returns on most items. Products must be unused and in original packaging.'),
               ('4. Payments', 'All prices are in INR. Payment must be completed before order processing.'),
-              ('5. Limitation of Liability', 'TOOLSHUB is not liable for indirect or incidental damages arising from use of our service.'),
+              ('5. Limitation of Liability',
+                  '${Brand.current.displayName} is not liable for indirect or '
+                      'incidental damages arising from use of our service.'),
             ].map((t) => Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

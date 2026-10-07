@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/brand_colors.dart';
+import '../../../core/brand/brand.dart';
 import '../../../core/router/app_router.dart';
 
 class AdminShell extends StatefulWidget {
@@ -42,11 +44,11 @@ class _AdminShellState extends State<AdminShell> {
                           children: [
                             Container(
                               width: 36, height: 36,
-                              decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(8)),
-                              child: const Center(child: Icon(Icons.handyman_rounded, size: 20, color: Colors.white)),
+                              decoration: BoxDecoration(color: BrandColors.accent, borderRadius: BorderRadius.circular(8)),
+                              child: Center(child: Icon(Brand.current.markIcon, size: 20, color: BrandColors.onAccent)),
                             ),
                             const SizedBox(width: 10),
-                            const Text('TOOLSHUB', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14, letterSpacing: 1)),
+                            Text(Brand.current.wordmark, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14, letterSpacing: 1)),
                           ],
                         ),
                       ),

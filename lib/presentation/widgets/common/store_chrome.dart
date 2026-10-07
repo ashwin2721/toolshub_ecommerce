@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:badges/badges.dart' as badges;
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/brand_colors.dart';
+import '../../../core/brand/brand.dart';
 import '../../../core/responsive.dart';
 import '../../../core/router/app_router.dart';
 import '../../../domain/entities/product_entity.dart';
@@ -78,11 +80,11 @@ class StoreAnnouncementBar extends ConsumerWidget {
     final t = (settings['announcementText'] as String?)?.trim();
     final c = (settings['announcementCtaLabel'] as String?)?.trim();
     final announcement =
-        (t == null || t.isEmpty) ? 'Get 50% Off on Selected Items' : t;
+        (t == null || t.isEmpty) ? Brand.current.copy.announcementFallback : t;
     final ctaLabel = (c == null || c.isEmpty) ? 'Shop Now' : c;
     return Container(
       width: double.infinity,
-      color: AppColors.primary,
+      color: BrandColors.accent,
       child: MaxWidthContainer(
         verticalPadding: 9,
         child: Row(
@@ -93,16 +95,18 @@ class StoreAnnouncementBar extends ConsumerWidget {
                 alignment: WrapAlignment.center,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
+                  // onAccent, not a hardcoded white: a light brand accent
+                  // (ToolsHub amber) needs dark text to stay legible.
                   Text('$announcement   ',
-                      style: const TextStyle(
-                          color: Colors.white,
+                      style: TextStyle(
+                          color: BrandColors.onAccent,
                           fontSize: 12,
                           fontWeight: FontWeight.w600)),
                   GestureDetector(
                     onTap: () => context.go(AppRoutes.productList),
                     child: Text(ctaLabel,
-                        style: const TextStyle(
-                            color: Colors.white,
+                        style: TextStyle(
+                            color: BrandColors.onAccent,
                             fontSize: 12,
                             fontWeight: FontWeight.w800,
                             decoration: TextDecoration.underline)),
@@ -153,7 +157,7 @@ class StoreHeader extends ConsumerWidget {
                     children: [
                       const AppLogo(size: 34),
                       const SizedBox(width: 8),
-                      Text('TOOLSHUB',
+                      Text(Brand.current.wordmark,
                           style: Theme.of(context)
                               .textTheme
                               .titleMedium
@@ -648,7 +652,7 @@ class StoreFooter extends StatelessWidget {
     final mobile = context.isMobile;
     final columns = <Widget>[
       _footerBrand(),
-      _footerCol('Shop', const ['Power Tools', 'Hand Tools', 'Safety Gear', 'Deals']),
+      _footerCol('Shop', Brand.current.copy.footerShopLinks),
       _footerCol('Support', const ['Contact Us', 'FAQ', 'Support Ticket', 'Delivery']),
     ];
 
@@ -683,10 +687,10 @@ class StoreFooter extends StatelessWidget {
             const SizedBox(height: 16),
             Row(
               children: [
-                const Expanded(
-                  child: Text(
-                      '© 2026 TOOLSHUB Technologies Pvt. Ltd. — Professional Tools & Hardware.',
-                      style: TextStyle(color: Colors.white54, fontSize: 12)),
+                Expanded(
+                  child: Text(Brand.current.copyrightLine(DateTime.now().year),
+                      style: const TextStyle(
+                          color: Colors.white54, fontSize: 12)),
                 ),
                 const SizedBox(width: 12),
                 Text('v1.0.1',
@@ -703,28 +707,29 @@ class StoreFooter extends StatelessWidget {
   }
 
   Widget _footerBrand() {
-    return const Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppLogo(size: 34, white: true),
-            SizedBox(width: 8),
-            Text('TOOLSHUB',
-                style: TextStyle(
+            const AppLogo(size: 34, white: true),
+            const SizedBox(width: 8),
+            Text(Brand.current.wordmark,
+                style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 1,
                     fontSize: 18)),
           ],
         ),
-        SizedBox(height: 12),
+        const SizedBox(height: 12),
         SizedBox(
           width: 260,
           child: Text(
-            'Your professional tools & hardware store. Quality gear for every job, delivered fast.',
-            style: TextStyle(color: Colors.white60, fontSize: 13, height: 1.5),
+            Brand.current.copy.footerBlurb,
+            style: const TextStyle(
+                color: Colors.white60, fontSize: 13, height: 1.5),
           ),
         ),
       ],

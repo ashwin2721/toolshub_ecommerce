@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/brand/brand.dart';
 import '../../../core/router/app_router.dart';
 import '../../../domain/entities/category_entity.dart';
 
@@ -47,8 +48,10 @@ class CategoryGrid extends StatelessWidget {
         separatorBuilder: (_, __) => const SizedBox(width: 12),
         itemBuilder: (context, i) {
           final cat = effective[i];
-          final icon = _icons[cat.id] ?? '🛠️';
-          final fallbackImg = _fallbackImages[cat.id] ?? 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=500&auto=format&fit=crop&q=80';
+          final icon =
+              _icons[cat.id] ?? Brand.current.copy.categoryFallbackEmoji;
+          final fallbackImg = _fallbackImages[cat.id] ??
+              Brand.current.copy.categoryFallbackImageUrl;
           final imageUrl = (cat.imageUrl != null && cat.imageUrl!.isNotEmpty) ? cat.imageUrl! : fallbackImg;
 
           return _InteractiveCard(

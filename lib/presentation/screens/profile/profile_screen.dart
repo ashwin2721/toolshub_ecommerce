@@ -5,6 +5,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/product_provider.dart';
 import '../orders/order_list_screen.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/brand/brand.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/responsive.dart';
 import '../../widgets/common/app_logo.dart';
@@ -165,10 +166,13 @@ class ProfileScreen extends ConsumerWidget {
                         icon: Icons.support_agent_outlined,
                         label: 'Support Tickets',
                         onTap: () => context.push(AppRoutes.supportTicket)),
-                    _ProfileMenuItem(
-                        icon: Icons.precision_manufacturing_outlined,
-                        label: 'Book Tool Service',
-                        onTap: () => context.push(AppRoutes.toolServiceBooking)),
+                    // Tool servicing only exists for a tools storefront.
+                    if (Brand.current.flags.toolServiceBooking)
+                      _ProfileMenuItem(
+                          icon: Icons.precision_manufacturing_outlined,
+                          label: 'Book Tool Service',
+                          onTap: () =>
+                              context.push(AppRoutes.toolServiceBooking)),
                     _ProfileMenuItem(
                         icon: Icons.chat_bubble_outline_rounded,
                         label: 'Gemini AI Assistant',
@@ -264,8 +268,8 @@ class _GuestView extends ConsumerWidget {
           children: [
             const AppLogo(size: 72),
           const SizedBox(height: 20),
-          const Text('TOOLSHUB',
-              style: TextStyle(
+          Text(Brand.current.wordmark,
+              style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 2,

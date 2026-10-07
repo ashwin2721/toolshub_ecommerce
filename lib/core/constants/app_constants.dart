@@ -1,15 +1,6 @@
 class AppConstants {
   AppConstants._();
 
-  // App Info
-  static const String appName = 'TOOLSHUB';
-  static const String appTagline = 'Professional Tools & Hardware Store';
-  static const String appVersion = '1.0.0';
-  static const String appBuildNumber = '1';
-
-  // API Endpoints (placeholder - replace with real values)
-  static const String baseUrl = 'https://api.toolshub.com/v1';
-
   // Firebase Collections
   static const String usersCollection = 'users';
   static const String productsCollection = 'products';
@@ -48,12 +39,6 @@ class AppConstants {
   static const int searchPageSize = 15;
   static const int ordersPageSize = 10;
 
-  // Image
-  static const String placeholderImageUrl =
-      'https://placehold.co/400x400/F3F4F6/9CA3AF?text=TOOLSHUB';
-  static const String productPlaceholderUrl =
-      'https://placehold.co/600x600/F3F4F6/9CA3AF?text=Product';
-
   // Durations
   static const Duration animationDuration = Duration(milliseconds: 300);
   static const Duration fastAnimation = Duration(milliseconds: 150);
@@ -86,12 +71,10 @@ class AppConstants {
   // GST
   static const double defaultGstRate = 18.0;
   static const String gstNumber = 'GSTIN_PLACEHOLDER';
-  static const String companyName = 'TOOLSHUB Technologies Pvt. Ltd.';
-  static const String companyAddress = '123, Industrial Area, Mumbai - 400001';
 
   // Shipping — free over this cart subtotal, else a flat delivery fee applies.
-  // Tools are high-ticket, so keep the threshold high enough that free
-  // shipping is a real incentive rather than something every order clears.
+  // Shared by every brand today. If a brand ever needs its own threshold, move
+  // these onto Brand rather than branching here.
   static const double freeShippingThreshold = 4999.0;
   static const double standardShippingFee = 99.0;
   static const double expressShippingFee = 199.0;
@@ -122,18 +105,6 @@ class AppConstants {
   static const String paymentDebitCard = 'debit_card';
   static const String paymentNetBanking = 'net_banking';
   static const String paymentCod = 'cod';
-
-  // Category IDs
-  static const String catPowerTools = 'power_tools';
-  static const String catHandTools = 'hand_tools';
-  static const String catMeasuringTools = 'measuring_tools';
-  static const String catElectricalTools = 'electrical_tools';
-  static const String catSafetyEquipment = 'safety_equipment';
-  static const String catWeldingEquipment = 'welding_equipment';
-  static const String catPlumbingTools = 'plumbing_tools';
-  static const String catGardeningTools = 'gardening_tools';
-  static const String catToolStorage = 'tool_storage';
-  static const String catIndustrialEquipment = 'industrial_equipment';
 
   // Hive Boxes
   static const String hiveCart = 'cart_box';
