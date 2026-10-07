@@ -38,6 +38,8 @@ class ProductModel extends ProductEntity {
     super.tags,
     super.compatibleProductIds,
     super.bulkPricing,
+    super.externalUrl,
+    super.externalStoreName,
   });
 
 
@@ -89,6 +91,8 @@ class ProductModel extends ProductEntity {
           ? List<String>.from(data['compatibleProductIds'])
           : null,
       bulkPricing: data['bulkPricing'] as Map<String, dynamic>?,
+      externalUrl: data['externalUrl'] as String?,
+      externalStoreName: data['externalStoreName'] as String?,
     );
   }
 

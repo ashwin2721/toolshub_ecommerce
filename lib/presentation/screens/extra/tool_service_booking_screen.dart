@@ -285,7 +285,7 @@ class _ToolServiceBookingScreenState extends ConsumerState<ToolServiceBookingScr
                       ?.copyWith(fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _serviceType,
+                initialValue: _serviceType,
                 decoration: const InputDecoration(
                   prefixIcon: Icon(Icons.settings_suggest_outlined),
                 ),

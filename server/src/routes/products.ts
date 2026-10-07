@@ -32,10 +32,48 @@ const mapProduct = (row: any) => ({
   compatibleProductIds: row.compatible_product_ids || null,
   bulkPricing: row.bulk_pricing || null,
   lowStockThreshold: row.low_stock_threshold ?? 5,
+  // Externally-fulfilled products link out to a partner store instead of being
+  // sold here. The URL is the single source of truth: `isExternal` is derived
+  // from it, so there is no way to end up flagged-but-linkless.
+  externalUrl: row.external_url || null,
+  externalStoreName: row.external_store_name || null,
+  isExternal: !!row.external_url,
   createdAt: row.created_at || new Date().toISOString(),
 });
 
 const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// An external product's URL is handed straight to the customer's browser, so only
+// http(s) is allowed. `javascript:` and `data:` parse fine as URLs and would be a
+// real injection vector on the web build, so the protocol allowlist - not the
+// try/catch - is what does the work here. Returns the normalised URL, or null.
+const normalizeExternalUrl = (raw: any): string | null => {
+  const s = (raw ?? '').toString().trim();
+  if (!s) return null;
+  let u: URL;
+  try {
+    u = new URL(s);
+  } catch {
+    return null; // rejects a bare "amazon.in/dp/x" with no scheme
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+  if (!u.hostname) return null;
+  return u.toString();
+};
+
+// Name the partner store from its own hostname, so the admin never has to type it
+// and it can never disagree with the link that was actually pasted.
+const storeNameFromUrl = (url: string): string => {
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return 'the store';
+  }
+  if (host.includes('amazon')) return 'Amazon';
+  if (host.includes('flipkart')) return 'Flipkart';
+  return host.replace(/^www\./, '');
+};
 
 // 1. Get Banners (active, customer-facing)
 router.get('/banners', async (req, res) => {
@@ -55,20 +93,171 @@ router.get('/banners', async (req, res) => {
   }
 });
 
-// 2. Get Categories (active)
+// ── Categories ──────────────────────────────────────────────────────────────
+const mapCategory = (c: any) => ({
+  id: c.id || c._id?.toString() || '',
+  name: c.name || '',
+  slug: c.slug || '',
+  description: c.description || null,
+  imageUrl: c.image_url || null,
+  isActive: c.is_active ?? true,
+  sortOrder: c.sort_order ?? 0,
+  productCount: Number(c.product_count ?? 0),
+});
+
+const slugify = (s: string) =>
+  s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+
+// Attach a live product count to each category, in one pass over the products.
+// Counting on read means a category created from the admin panel reports the
+// right number without a denormalised counter to keep in step.
+async function withProductCounts(rows: any[]) {
+  const all = await products().find({ is_active: true }).toArray();
+  const counts: Record<string, number> = {};
+  for (const p of all) {
+    if (p.category_id) counts[p.category_id] = (counts[p.category_id] || 0) + 1;
+  }
+  return rows.map((c) => ({ ...mapCategory(c), productCount: counts[c.id] ?? 0 }));
+}
+
+// 2. Get Categories (active, customer-facing)
 router.get('/categories', async (req, res) => {
   try {
     const rows = await categories().find({ is_active: true }).sort({ sort_order: 1 }).toArray();
-    res.json(rows.map((c) => ({
-      id: c.id,
-      name: c.name,
-      slug: c.slug,
-      description: c.description,
-      imageUrl: c.image_url,
-      isActive: c.is_active,
-      sortOrder: c.sort_order,
-      productCount: c.product_count,
-    })));
+    res.json(await withProductCounts(rows));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin category list — returns ALL categories (active + hidden) so they can be
+// seen and re-enabled. MUST be declared before any '/categories/:id' GET route.
+router.get('/categories/admin', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const rows = await categories().find({}).sort({ sort_order: 1 }).toArray();
+    res.json(await withProductCounts(rows));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create a category (Admin only). The id is derived from the slug so it stays
+// readable in product records and in storefront category URLs.
+router.post('/categories', authenticateToken, requireAdmin, async (req, res) => {
+  const { name, description, imageUrl, sortOrder, isActive } = req.body;
+  const trimmedName = (name ?? '').toString().trim();
+  if (!trimmedName) {
+    return res.status(400).json({ error: 'Category name is required' });
+  }
+
+  try {
+    const slug = slugify(trimmedName);
+    if (!slug) {
+      return res.status(400).json({ error: 'Category name must contain letters or numbers' });
+    }
+
+    // Reject duplicates up front, so the product form's dropdown never offers
+    // two options that look identical.
+    const clash = await categories().findOne({ slug });
+    if (clash) {
+      return res.status(409).json({ error: `A category named "${clash.name}" already exists` });
+    }
+
+    const id = `cat-${slug}`;
+    const sortNum = Number(sortOrder);
+    const sort = Number.isFinite(sortNum)
+      ? sortNum
+      : (await categories().countDocuments({})) + 1;
+
+    await categories().insertOne({
+      _id: id,
+      id,
+      name: trimmedName,
+      slug,
+      description: description ? String(description).trim() : null,
+      image_url: imageUrl ? String(imageUrl).trim() : null,
+      is_active: isActive !== false,
+      sort_order: sort,
+      product_count: 0,
+      created_at: new Date(),
+    });
+
+    res.status(201).json({ id, message: 'Category created successfully' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update a category (Admin only) — only provided fields change.
+router.patch('/categories/:id', authenticateToken, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { name, description, imageUrl, sortOrder, isActive } = req.body;
+
+  try {
+    const existing = await categories().findOne({ _id: id });
+    if (!existing) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+
+    const set: any = {};
+    if (name !== undefined) {
+      const trimmed = String(name).trim();
+      const slug = slugify(trimmed);
+      if (!slug) {
+        return res.status(400).json({ error: 'Category name must contain letters or numbers' });
+      }
+      const clash = await categories().findOne({ slug });
+      if (clash && clash.id !== id) {
+        return res.status(409).json({ error: `A category named "${clash.name}" already exists` });
+      }
+      set.name = trimmed;
+      set.slug = slug;
+    }
+    if (description !== undefined) {
+      set.description = description ? String(description).trim() : null;
+    }
+    if (imageUrl !== undefined) {
+      set.image_url = imageUrl ? String(imageUrl).trim() : null;
+    }
+    if (sortOrder !== undefined) {
+      const n = Number(sortOrder);
+      if (Number.isFinite(n)) set.sort_order = n;
+    }
+    if (isActive !== undefined) set.is_active = !!isActive;
+
+    if (Object.keys(set).length > 0) {
+      await categories().updateOne({ _id: id }, { $set: set });
+      // Each product caches its category's name for display — keep it in step
+      // with a rename, or product rows would show the old one.
+      if (set.name) {
+        await products().updateMany({ category_id: id }, { $set: { category_name: set.name } });
+      }
+    }
+
+    res.json({ message: 'Category updated successfully' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete a category (Admin only). Refused while products still point at it, so
+// the catalog can't end up with products filed under a category that is gone.
+router.delete('/categories/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const existing = await categories().findOne({ _id: req.params.id });
+    if (!existing) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    const inUse = await products().countDocuments({ category_id: req.params.id });
+    if (inUse > 0) {
+      return res.status(409).json({
+        error:
+          `${inUse} product${inUse === 1 ? ' still uses' : 's still use'} this category. ` +
+          'Move them to another category first, or hide this one instead.',
+      });
+    }
+    await categories().deleteOne({ _id: req.params.id });
+    res.json({ message: 'Category deleted successfully' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -148,10 +337,21 @@ router.post('/products', authenticateToken, requireAdmin, async (req, res) => {
     name, sku, description, price, discountPrice, stockQuantity, lowStockThreshold,
     categoryId, brandId, brandName, isFeatured, isFlashSale, isNewArrival,
     features, specifications, imageUrls, compatibleProductIds, bulkPricing,
+    isExternal, externalUrl, externalStoreName,
   } = req.body;
 
   if (!name || !sku || !price) {
     return res.status(400).json({ error: 'Name, SKU, and price are required' });
+  }
+
+  // Marking a product external without a usable link would render a dead
+  // "Buy on ..." button, so refuse it at the door rather than storing it.
+  const wantsExternal = !!isExternal || !!externalUrl;
+  const externalUrlClean = wantsExternal ? normalizeExternalUrl(externalUrl) : null;
+  if (wantsExternal && !externalUrlClean) {
+    return res.status(400).json({
+      error: 'An external product needs a valid link starting with http:// or https://',
+    });
   }
 
   try {
@@ -191,6 +391,10 @@ router.post('/products', authenticateToken, requireAdmin, async (req, res) => {
       image_urls: imageUrls || null,
       compatible_product_ids: compatibleProductIds || null,
       bulk_pricing: bulkPricing || null,
+      external_url: externalUrlClean,
+      external_store_name: externalUrlClean
+        ? (externalStoreName || storeNameFromUrl(externalUrlClean))
+        : null,
       created_at: new Date(),
     });
 
@@ -205,8 +409,9 @@ router.put('/products/:id', authenticateToken, requireAdmin, async (req, res) =>
   const { id } = req.params;
   const {
     name, sku, description, price, discountPrice, stockQuantity, lowStockThreshold,
-    categoryId, brandId, isFeatured, isFlashSale, isNewArrival,
+    categoryId, brandId, brandName, isFeatured, isFlashSale, isNewArrival,
     features, specifications, imageUrls, compatibleProductIds, bulkPricing, isActive,
+    externalUrl, externalStoreName,
   } = req.body;
 
   try {
@@ -222,7 +427,8 @@ router.put('/products/:id', authenticateToken, requireAdmin, async (req, res) =>
     }
     if (sku != null) set.sku = sku;
     if (description != null) set.description = description;
-    if (brandId != null) { set.brand_id = brandId; set.brand_name = brandId; }
+    if (brandId != null) set.brand_id = brandId;
+    if (brandName != null) set.brand_name = brandName;
     if (categoryId != null) {
       set.category_id = categoryId;
       const cat = await categories().findOne({ _id: categoryId });
@@ -241,6 +447,23 @@ router.put('/products/:id', authenticateToken, requireAdmin, async (req, res) =>
     if (compatibleProductIds != null) set.compatible_product_ids = compatibleProductIds;
     if (bulkPricing != null) set.bulk_pricing = bulkPricing;
     if (isActive !== undefined) set.is_active = isActive;
+    // `!== undefined` (not `!= null`) so that an explicit null CLEARS the link and
+    // turns the product back into a normal one.
+    if (externalUrl !== undefined) {
+      if (externalUrl === null || externalUrl === '') {
+        set.external_url = null;
+        set.external_store_name = null;
+      } else {
+        const u = normalizeExternalUrl(externalUrl);
+        if (!u) {
+          return res.status(400).json({
+            error: 'externalUrl must start with http:// or https://',
+          });
+        }
+        set.external_url = u;
+        set.external_store_name = externalStoreName || storeNameFromUrl(u);
+      }
+    }
 
     if (Object.keys(set).length > 0) {
       await products().updateOne({ _id: id }, { $set: set });

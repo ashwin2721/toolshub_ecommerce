@@ -12,6 +12,7 @@ import '../../../domain/entities/product_entity.dart';
 import '../../widgets/common/store_chrome.dart';
 import '../../providers/product_provider.dart';
 import '../../providers/cart_provider.dart';
+import '../../../core/utils/external_link_helper.dart';
 
 class ChatMessage {
   final String text;
@@ -639,10 +640,26 @@ class _MiniProductCard extends ConsumerWidget {
                       ),
                     ),
                     InkWell(
-                      onTap: () {
-                        ref.read(cartProvider.notifier).addItem(product, quantity: 1);
-                        ScaffoldMessenger.of(context).clearSnackBars();
-                        ScaffoldMessenger.of(context).showSnackBar(
+                      onTap: () async {
+                        final messenger = ScaffoldMessenger.of(context);
+                        // Externally-fulfilled products are bought on the
+                        // partner's store, so this chip links out instead.
+                        if (product.isExternalLink) {
+                          final ok =
+                              await openExternalLink(product.externalUrl);
+                          if (!ok) {
+                            messenger.showSnackBar(SnackBar(
+                                content: Text('Couldn\'t open the '
+                                    '${product.externalStoreLabel} link'),
+                                backgroundColor: AppColors.error));
+                          }
+                          return;
+                        }
+                        ref
+                            .read(cartProvider.notifier)
+                            .addItem(product, quantity: 1);
+                        messenger.clearSnackBars();
+                        messenger.showSnackBar(
                           SnackBar(
                             content: Text('Added ${product.name} to cart!'),
                             backgroundColor: AppColors.success,
@@ -653,11 +670,19 @@ class _MiniProductCard extends ConsumerWidget {
                       child: Container(
                         padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: AppColors.primaryContainer,
+                          color: product.isExternalLink
+                              ? AppColors.warningContainer
+                              : AppColors.primaryContainer,
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: const Icon(Icons.add_shopping_cart_outlined,
-                            size: 14, color: AppColors.primary),
+                        child: Icon(
+                            product.isExternalLink
+                                ? Icons.open_in_new_rounded
+                                : Icons.add_shopping_cart_outlined,
+                            size: 14,
+                            color: product.isExternalLink
+                                ? AppColors.warning
+                                : AppColors.primary),
                       ),
                     ),
                   ],

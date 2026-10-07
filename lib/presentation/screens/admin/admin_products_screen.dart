@@ -6,6 +6,7 @@ import '../../providers/product_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/utils/image_upload_helper.dart';
+import 'admin_categories_screen.dart';
 
 final adminProductsProvider = FutureProvider<List<dynamic>>((ref) async {
   final dio = ref.watch(dioProvider);
@@ -46,6 +47,11 @@ class _AdminProductsScreenState extends ConsumerState<AdminProductsScreen> {
         'stockQuantity': data['stockQuantity'] ?? 0,
         'lowStockThreshold': data['lowStockThreshold'] ?? 5,
         'categoryId': data['categoryId'],
+        'isFeatured': data['isFeatured'] ?? false,
+        'isFlashSale': data['isFlashSale'] ?? false,
+        'isNewArrival': data['isNewArrival'] ?? false,
+        'isExternal': data['isExternal'] ?? false,
+        'externalUrl': data['externalUrl'],
         'brandName': data['brandName'],
         'imageUrls': data['imageUrls'],
         'specifications': data['specifications'],
@@ -301,6 +307,29 @@ class _AdminProductsScreenState extends ConsumerState<AdminProductsScreen> {
                                                     fontWeight: FontWeight.w600,
                                                     fontSize: 14)),
                                           ),
+                                          if (data['isExternal'] == true) ...[
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                  horizontal: 6, vertical: 1),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.warning
+                                                    .withValues(alpha: 0.15),
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                              ),
+                                              child: Text(
+                                                  (data['externalStoreName'] ??
+                                                          'External')
+                                                      .toString()
+                                                      .toUpperCase(),
+                                                  style: const TextStyle(
+                                                      fontSize: 10,
+                                                      color: AppColors.warning,
+                                                      fontWeight:
+                                                          FontWeight.w700)),
+                                            ),
+                                          ],
                                           if (!isActive) ...[
                                             const SizedBox(width: 6),
                                             Container(
@@ -361,7 +390,7 @@ class _AdminProductsScreenState extends ConsumerState<AdminProductsScreen> {
                                           }
                                         }
                                       },
-                                      activeColor: AppColors.primary,
+                                      activeThumbColor: AppColors.primary,
                                       materialTapTargetSize:
                                           MaterialTapTargetSize.shrinkWrap,
                                     ),
@@ -480,6 +509,8 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
   bool _isFeatured = false;
   bool _isFlashSale = false;
   bool _isNewArrival = false;
+  bool _isExternal = false;
+  final _externalUrlCtrl = TextEditingController();
   bool _loading = false;
   bool _uploadingImage = false;
 
@@ -494,6 +525,7 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
     _lowStockCtrl.dispose();
     _brandCtrl.dispose();
     _imageUrlCtrl.dispose();
+    _externalUrlCtrl.dispose();
     super.dispose();
   }
 
@@ -535,7 +567,7 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
         'discountPrice': _discountPriceCtrl.text.isNotEmpty
             ? double.tryParse(_discountPriceCtrl.text)
             : null,
-        'stockQuantity': int.tryParse(_stockCtrl.text) ?? 0,
+        'stockQuantity': _isExternal ? 0 : (int.tryParse(_stockCtrl.text) ?? 0),
         'lowStockThreshold': int.tryParse(_lowStockCtrl.text) ?? 5,
         'categoryId': _selectedCategoryId,
         'brandName': _brandCtrl.text.isNotEmpty ? _brandCtrl.text : null,
@@ -543,6 +575,10 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
         'isFeatured': _isFeatured,
         'isFlashSale': _isFlashSale,
         'isNewArrival': _isNewArrival,
+        'isExternal': _isExternal,
+        // Guarded on the toggle: switching off after typing a URL must not ship
+        // the text the now-unmounted field still holds.
+        'externalUrl': _isExternal ? _externalUrlCtrl.text.trim() : null,
       });
       ref.invalidate(adminProductsProvider);
 
@@ -575,6 +611,64 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Sits above Basic Information on purpose: this toggle changes what
+              // the rest of the form means (it hides Stock), so it has to be read
+              // before the fields it reconfigures.
+              Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.border),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Column(
+                  children: [
+                    SwitchListTile(
+                      value: _isExternal,
+                      onChanged: (v) => setState(() => _isExternal = v),
+                      activeThumbColor: AppColors.primary,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Sold on an external store',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: const Text(
+                          'Customers get a "Buy on Amazon" button instead of Add to '
+                          'Cart. This product can never be added to a cart or ordered '
+                          'here.',
+                          style: TextStyle(fontSize: 12)),
+                    ),
+                    if (_isExternal) ...[
+                      const SizedBox(height: 4),
+                      TextFormField(
+                        controller: _externalUrlCtrl,
+                        keyboardType: TextInputType.url,
+                        decoration: const InputDecoration(
+                          labelText: 'Product link *',
+                          prefixIcon: Icon(Icons.link_rounded),
+                          hintText: 'https://www.amazon.in/dp/...',
+                          helperText: 'The store name is taken from the link.',
+                        ),
+                        validator: (v) {
+                          if (!_isExternal) return null;
+                          final s = (v ?? '').trim();
+                          if (s.isEmpty) return 'Required for an external product';
+                          // Uri.tryParse accepts 'amazon.in/dp/x' with an empty
+                          // scheme and host, so check both explicitly. Matches the
+                          // server rule exactly so neither side rejects what the
+                          // other accepted.
+                          final u = Uri.tryParse(s);
+                          if (u == null ||
+                              u.host.isEmpty ||
+                              (u.scheme != 'http' && u.scheme != 'https')) {
+                            return 'Enter a full link starting with https://';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
               // Basic Info
               Text('Basic Information', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 12),
@@ -584,12 +678,17 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
               Row(children: [
                 Expanded(child: TextFormField(controller: _skuCtrl, decoration: const InputDecoration(labelText: 'SKU *'),
                     validator: (v) => v?.isEmpty ?? true ? 'Required' : null)),
-                const SizedBox(width: 12),
-                Expanded(child: TextFormField(controller: _stockCtrl, decoration: const InputDecoration(labelText: 'Stock *'),
-                    keyboardType: TextInputType.number)),
-                const SizedBox(width: 12),
-                Expanded(child: TextFormField(controller: _lowStockCtrl, decoration: const InputDecoration(labelText: 'Low-stock alert'),
-                    keyboardType: TextInputType.number)),
+                // We hold no inventory for an externally-fulfilled product, and a
+                // number left in here would make the product list and low-stock
+                // reports claim goods that do not exist.
+                if (!_isExternal) ...[
+                  const SizedBox(width: 12),
+                  Expanded(child: TextFormField(controller: _stockCtrl, decoration: const InputDecoration(labelText: 'Stock *'),
+                      keyboardType: TextInputType.number)),
+                  const SizedBox(width: 12),
+                  Expanded(child: TextFormField(controller: _lowStockCtrl, decoration: const InputDecoration(labelText: 'Low-stock alert'),
+                      keyboardType: TextInputType.number)),
+                ],
               ]),
               const SizedBox(height: 12),
               Row(children: [
@@ -604,12 +703,25 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
               Row(children: [
                 Expanded(
                   child: Consumer(builder: (context, ref, _) {
-                    final cats =
-                        ref.watch(categoriesProvider).valueOrNull ?? const [];
+                    final catsAsync = ref.watch(categoriesProvider);
+                    final cats = catsAsync.valueOrNull ?? const [];
+                    final hasNone = catsAsync.hasValue && cats.isEmpty;
+                    // A value that is no longer in the list (category hidden or
+                    // deleted elsewhere) would trip the dropdown's assertion,
+                    // so only show one the items can match.
+                    final ids = {for (final c in cats) c.id};
                     return DropdownButtonFormField<String>(
-                      value: _selectedCategoryId,
+                      initialValue: ids.contains(_selectedCategoryId)
+                          ? _selectedCategoryId
+                          : null,
                       isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Category'),
+                      decoration: InputDecoration(
+                        labelText: 'Category',
+                        hintText: hasNone ? 'None yet — add one' : null,
+                        helperText: hasNone
+                            ? 'Tap + to create your first category'
+                            : null,
+                      ),
                       items: [
                         for (final c in cats)
                           DropdownMenuItem(
@@ -622,7 +734,18 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
                     );
                   }),
                 ),
-                const SizedBox(width: 12),
+                // Create a category without leaving a half-filled product form.
+                IconButton(
+                  icon: const Icon(Icons.add_circle_outline),
+                  tooltip: 'New category',
+                  onPressed: () async {
+                    final id = await showCategoryFormDialog(context, ref);
+                    if (id != null && id.isNotEmpty && mounted) {
+                      setState(() => _selectedCategoryId = id);
+                    }
+                  },
+                ),
+                const SizedBox(width: 4),
                 Expanded(child: TextFormField(controller: _brandCtrl, decoration: const InputDecoration(labelText: 'Brand'))),
               ]),
               const SizedBox(height: 12),

@@ -12,6 +12,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/responsive.dart';
 import '../../../core/router/app_router.dart';
 import '../../../domain/entities/product_entity.dart';
+import '../../../core/utils/external_link_helper.dart';
 import '../../widgets/common/app_logo.dart';
 import '../../widgets/common/store_chrome.dart';
 import '../../widgets/product/product_card.dart';
@@ -325,7 +326,25 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen>
           ),
         ),
         const SizedBox(height: 16),
-        Row(
+        if (product.isExternalLink)
+          Row(
+            children: [
+              const Icon(Icons.storefront_outlined,
+                  color: AppColors.info, size: 20),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Sold and shipped by ${product.externalStoreLabel}',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: AppColors.info,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          )
+        else
+          Row(
           children: [
             Icon(
                 product.inStock
@@ -352,21 +371,53 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen>
           ],
         ),
         const SizedBox(height: 20),
-        Row(
-          children: [
-            Text('Quantity:',
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.bold)),
-            const SizedBox(width: 16),
-            _QuantitySelector(
-              value: _quantity,
-              max: product.stockQuantity.clamp(1, 10),
-              onChanged: (v) => setState(() => _quantity = v),
-            ),
-          ],
-        ),
+        if (!product.isExternalLink)
+          Row(
+            children: [
+              Text('Quantity:',
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(width: 16),
+              _QuantitySelector(
+                value: _quantity,
+                max: product.stockQuantity.clamp(1, 10),
+                onChanged: (v) => setState(() => _quantity = v),
+              ),
+            ],
+          ),
         const SizedBox(height: 20),
-        Row(
+        if (product.isExternalLink) ...[
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                final ok = await openExternalLink(product.externalUrl);
+                if (!ok) {
+                  messenger.showSnackBar(SnackBar(
+                      content: Text(
+                          'Couldn\'t open the ${product.externalStoreLabel} link'),
+                      backgroundColor: AppColors.error));
+                }
+              },
+              icon: const Icon(Icons.open_in_new_rounded, size: 18),
+              label: Text('Buy on ${product.externalStoreLabel}'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'You\'ll be taken to ${product.externalStoreLabel} to finish this '
+            'purchase. The price there may differ.',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: AppColors.textSecondary),
+          ),
+        ] else
+          Row(
           children: [
             Expanded(
               child: OutlinedButton.icon(
@@ -422,7 +473,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen>
               basePrice: product.effectivePrice),
           const SizedBox(height: 16),
         ],
-        Container(
+        if (!product.isExternalLink)
+          Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
               border: Border.all(color: AppColors.border),

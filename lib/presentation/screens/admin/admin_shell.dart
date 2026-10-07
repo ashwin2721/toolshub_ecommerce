@@ -73,6 +73,13 @@ class _AdminShellState extends State<AdminShell> {
                       )),
                       const Divider(color: Colors.white24, indent: 16, endIndent: 16),
                       _SideNavItem(
+                        icon: Icons.category_outlined,
+                        activeIcon: Icons.category_rounded,
+                        label: 'Categories',
+                        isSelected: false,
+                        onTap: () => context.go(AppRoutes.adminCategories),
+                      ),
+                      _SideNavItem(
                         icon: Icons.tag_outlined,
                         activeIcon: Icons.tag_rounded,
                         label: 'Coupons',

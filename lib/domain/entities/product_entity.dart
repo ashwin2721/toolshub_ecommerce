@@ -38,6 +38,14 @@ class ProductEntity extends Equatable {
   final List<String>? compatibleProductIds;
   final Map<String, dynamic>? bulkPricing;
 
+  /// Link to a partner store (Amazon, Flipkart, ...). When set, this product
+  /// is bought there rather than here: the storefront shows a "Buy on <store>"
+  /// button instead of Add to Cart, and it can never enter a cart or an order.
+  final String? externalUrl;
+
+  /// Display name of that store, derived server-side from the link's host.
+  final String? externalStoreName;
+
   const ProductEntity({
     required this.id,
     required this.sku,
@@ -75,6 +83,8 @@ class ProductEntity extends Equatable {
     this.tags,
     this.compatibleProductIds,
     this.bulkPricing,
+    this.externalUrl,
+    this.externalStoreName,
   });
 
 
@@ -82,6 +92,18 @@ class ProductEntity extends Equatable {
   bool get hasDiscount => discountPrice != null && discountPrice! < price;
   double get discountPercent =>
       hasDiscount ? ((price - discountPrice!) / price * 100).roundToDouble() : 0;
+  /// True only when there is a usable link, so a half-saved record can never
+  /// render a button that opens nothing. Gate all external UI on this, never
+  /// on `externalUrl != null` alone.
+  bool get isExternalLink =>
+      externalUrl != null && externalUrl!.trim().isNotEmpty;
+
+  /// What to call the partner store in a button label.
+  String get externalStoreLabel =>
+      (externalStoreName != null && externalStoreName!.trim().isNotEmpty)
+          ? externalStoreName!.trim()
+          : 'the store';
+
   bool get inStock => stockQuantity > 0;
   bool get isLowStock => stockQuantity > 0 && stockQuantity <= 10;
   String? get primaryImage => imageUrls.isNotEmpty ? imageUrls.first : null;

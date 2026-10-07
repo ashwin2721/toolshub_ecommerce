@@ -10,6 +10,7 @@ import '../../../domain/entities/product_entity.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/cart_provider.dart';
+import '../../../core/utils/external_link_helper.dart';
 import '../../providers/product_provider.dart';
 import '../../widgets/common/store_chrome.dart';
 
@@ -288,11 +289,13 @@ class _CompareColumn extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  product.inStock
-                      ? (product.isLowStock
-                          ? 'Only ${product.stockQuantity} left'
-                          : 'In Stock')
-                      : 'Out of Stock',
+                  product.isExternalLink
+                      ? product.externalStoreLabel
+                      : product.inStock
+                          ? (product.isLowStock
+                              ? 'Only ${product.stockQuantity} left'
+                              : 'In Stock')
+                          : 'Out of Stock',
                   style: TextStyle(
                     color: product.inStock
                         ? AppColors.success
@@ -313,31 +316,53 @@ class _CompareColumn extends ConsumerWidget {
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: product.inStock
-                      ? () {
-                          ref.read(cartProvider.notifier).addItem(product);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Added to cart!'),
-                              duration: Duration(seconds: 1),
-                              backgroundColor: AppColors.success,
-                            ),
-                          );
-                        }
-                      : null,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.primary,
-                    side: const BorderSide(color: AppColors.primary),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                  ),
-                  child: Text(
-                      product.inStock ? 'Add to Cart' : 'Out of Stock',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w700, fontSize: 13)),
-                ),
+                child: product.isExternalLink
+                    ? ElevatedButton.icon(
+                        onPressed: () async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          final ok = await openExternalLink(product.externalUrl);
+                          if (!ok) {
+                            messenger.showSnackBar(SnackBar(
+                                content: Text('Couldn\'t open the '
+                                    '${product.externalStoreLabel} link'),
+                                backgroundColor: AppColors.error));
+                          }
+                        },
+                        icon: const Icon(Icons.open_in_new_rounded, size: 15),
+                        label: Text('Buy on ${product.externalStoreLabel}',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 12)),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                        ),
+                      )
+                    : OutlinedButton(
+                        onPressed: product.inStock
+                            ? () {
+                                ref.read(cartProvider.notifier).addItem(product);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Added to cart!'),
+                                    duration: Duration(seconds: 1),
+                                    backgroundColor: AppColors.success,
+                                  ),
+                                );
+                              }
+                            : null,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          side: const BorderSide(color: AppColors.primary),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                        ),
+                        child: Text(
+                            product.inStock ? 'Add to Cart' : 'Out of Stock',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 13)),
+                      ),
               ),
             ],
           ),

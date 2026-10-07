@@ -24,6 +24,7 @@ import '../../presentation/screens/extra/gemini_assistant_screen.dart';
 import '../../presentation/screens/admin/admin_shell.dart';
 import '../../presentation/screens/admin/admin_dashboard_screen.dart';
 import '../../presentation/screens/admin/admin_products_screen.dart';
+import '../../presentation/screens/admin/admin_categories_screen.dart';
 import '../../presentation/screens/admin/admin_orders_screen.dart';
 import '../../presentation/screens/admin/admin_content_screen.dart';
 import '../../presentation/screens/admin/admin_delivery_screen.dart';
@@ -72,6 +73,7 @@ class AppRoutes {
   static const String adminDashboard = '/admin/dashboard';
   static const String adminProducts = '/admin/products';
   static const String adminAddProduct = '/admin/products/add';
+  static const String adminCategories = '/admin/categories';
   static const String adminOrders = '/admin/orders';
   static const String adminCustomers = '/admin/customers';
   static const String adminInventory = '/admin/inventory';
@@ -236,6 +238,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.adminAddProduct,
             builder: (c, s) => const AdminAddProductScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.adminCategories,
+            builder: (c, s) => const AdminCategoriesScreen(),
           ),
           GoRoute(
             path: AppRoutes.adminOrders,

@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/external_link_helper.dart';
 import '../../../domain/entities/product_entity.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/cart_provider.dart';
@@ -67,8 +68,8 @@ class _HoverLiftState extends State<_HoverLift> {
         curve: Curves.easeOut,
         transform: _isHovered
             ? (Matrix4.identity()
-              ..translate(0.0, -5.0, 0.0)
-              ..scale(1.02, 1.02, 1.02))
+              ..translateByDouble(0.0, -5.0, 0.0, 1.0)
+              ..scaleByDouble(1.02, 1.02, 1.02, 1.0))
             : Matrix4.identity(),
         child: widget.child,
       ),
@@ -138,6 +139,8 @@ class _GridCard extends StatelessWidget {
                           const _Badge(label: 'SALE', color: AppColors.flash),
                         if (product.isNewArrival)
                           const _Badge(label: 'NEW', color: AppColors.new_),
+                        if (product.isExternalLink)
+                          _ExternalBadge(label: product.externalStoreLabel),
                       ],
                     ),
                   ),
@@ -154,7 +157,9 @@ class _GridCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (!product.inStock)
+                  // An external product has no stock here by design, so the scrim
+                  // would otherwise black out every one of them.
+                  if (!product.isExternalLink && !product.inStock)
                     Positioned.fill(
                       child: DecoratedBox(
                         decoration: BoxDecoration(
@@ -233,30 +238,46 @@ class _GridCard extends StatelessWidget {
                   const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,
-                    child: OutlinedButton(
-                      onPressed: product.inStock
-                          ? () {
-                              cart.addItem(product);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Added to cart!'),
-                                  duration: Duration(seconds: 1),
-                                  backgroundColor: AppColors.success,
-                                ),
-                              );
-                            }
-                          : null,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.primary,
-                        side: const BorderSide(color: AppColors.primary),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                      ),
-                      child: Text(product.inStock ? 'Add to Cart' : 'Out of Stock',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 13)),
-                    ),
+                    // Filled rather than outlined, so it reads as a different
+                    // action from Add to Cart rather than a variant of it.
+                    child: product.isExternalLink
+                        ? ElevatedButton.icon(
+                            onPressed: () => _openStore(context, product),
+                            icon: const Icon(Icons.open_in_new_rounded, size: 15),
+                            label: Text('Buy on ${product.externalStoreLabel}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700, fontSize: 12)),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8)),
+                            ),
+                          )
+                        : OutlinedButton(
+                            onPressed: product.inStock
+                                ? () {
+                                    cart.addItem(product);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Added to cart!'),
+                                        duration: Duration(seconds: 1),
+                                        backgroundColor: AppColors.success,
+                                      ),
+                                    );
+                                  }
+                                : null,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.primary,
+                              side: const BorderSide(color: AppColors.primary),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8)),
+                            ),
+                            child: Text(
+                                product.inStock ? 'Add to Cart' : 'Out of Stock',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700, fontSize: 13)),
+                          ),
                   ),
                 ],
               ),
@@ -321,7 +342,13 @@ class _CompactCard extends StatelessWidget {
                         )
                       : const _ImagePlaceholder(height: 125),
                 ),
-                if (product.hasDiscount)
+                if (product.isExternalLink)
+                  Positioned(
+                    top: 6,
+                    left: 6,
+                    child: _ExternalBadge(label: product.externalStoreLabel),
+                  )
+                else if (product.hasDiscount)
                   Positioned(
                     top: 6,
                     left: 6,
@@ -471,41 +498,65 @@ class _ListCard extends StatelessWidget {
                 children: [
                   _WishlistBtn(productId: product.id, isWishlisted: isWishlisted),
                   const SizedBox(height: 12),
-                  GestureDetector(
-                    onTap: product.inStock
-                        ? () {
-                            cart.addItem(product);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Added to cart!'),
-                                duration: Duration(seconds: 1),
-                                backgroundColor: AppColors.success,
-                              ),
-                            );
-                          }
-                        : null,
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: product.inStock ? AppColors.primary : AppColors.textDisabled,
-                        shape: BoxShape.circle,
-                        boxShadow: product.inStock
-                            ? [
-                                BoxShadow(
-                                  color: AppColors.primary.withValues(alpha: 0.35),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
-                                )
-                              ]
-                            : null,
+                  // External products route to the partner store. Note the
+                  // deliberate bypass of the `product.inStock` styling below: their
+                  // stock is 0, which would otherwise render this grey-disabled.
+                  if (product.isExternalLink)
+                    GestureDetector(
+                      onTap: () => _openStore(context, product),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.warning,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.warning.withValues(alpha: 0.35),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            )
+                          ],
+                        ),
+                        child: const Icon(Icons.open_in_new_rounded,
+                            size: 16, color: Colors.white),
                       ),
-                      child: const Icon(
-                        Icons.add_shopping_cart_rounded,
-                        size: 16,
-                        color: Colors.white,
+                    )
+                  else
+                    GestureDetector(
+                      onTap: product.inStock
+                          ? () {
+                              cart.addItem(product);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Added to cart!'),
+                                  duration: Duration(seconds: 1),
+                                  backgroundColor: AppColors.success,
+                                ),
+                              );
+                            }
+                          : null,
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: product.inStock ? AppColors.primary : AppColors.textDisabled,
+                          shape: BoxShape.circle,
+                          boxShadow: product.inStock
+                              ? [
+                                  BoxShadow(
+                                    color: AppColors.primary.withValues(alpha: 0.35),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  )
+                                ]
+                              : null,
+                        ),
+                        child: const Icon(
+                          Icons.add_shopping_cart_rounded,
+                          size: 16,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -514,6 +565,31 @@ class _ListCard extends StatelessWidget {
       ),
     );
   }
+}
+
+// Opens an externally-fulfilled product's store link, telling the customer when
+// it could not be opened — a dead link must not look like a button that does
+// nothing. Shared by all three card layouts.
+Future<void> _openStore(BuildContext context, ProductEntity product) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final ok = await openExternalLink(product.externalUrl);
+  if (!ok) {
+    messenger.showSnackBar(SnackBar(
+      content: Text('Couldn\'t open the ${product.externalStoreLabel} link'),
+      backgroundColor: AppColors.error,
+    ));
+  }
+}
+
+/// Marks a card as linking out to a partner store, so the customer knows the tap
+/// leaves the app before they make it.
+class _ExternalBadge extends StatelessWidget {
+  final String label;
+  const _ExternalBadge({required this.label});
+
+  @override
+  Widget build(BuildContext context) =>
+      _Badge(label: label.toUpperCase(), color: AppColors.warning);
 }
 
 // ─── Shared Widgets ───────────────────────────────────────────────────────────

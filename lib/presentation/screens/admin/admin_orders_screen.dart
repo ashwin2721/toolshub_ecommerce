@@ -7,6 +7,14 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/image_upload_helper.dart';
 import '../../../core/utils/csv_download.dart';
 
+/// The statuses the API accepts, mirroring ORDER_STATUSES in
+/// server/src/routes/orders.ts. Kept in one place so the dropdown's items
+/// and its value check cannot drift apart.
+const _kOrderStatuses = [
+  'pending', 'confirmed', 'processing', 'packed', 'shipped', 'delivered',
+  'cancelled',
+];
+
 final adminOrdersProvider = FutureProvider<List<dynamic>>((ref) async {
   final dio = ref.watch(dioProvider);
   final response = await dio.get('/orders/admin');
@@ -51,7 +59,10 @@ class _AdminOrdersScreenState extends ConsumerState<AdminOrdersScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabCtrl;
   Timer? _pollTimer;
-  final _statuses = ['All', 'Pending', 'Confirmed', 'Processing', 'Shipped', 'Delivered', 'Cancelled'];
+  // 'Packed' is offered by the per-order status dropdown, so it needs a tab
+  // too - without one, a packed order vanished from every tab but All.
+  final _statuses = ['All', 'Pending', 'Confirmed', 'Processing', 'Packed',
+      'Shipped', 'Delivered', 'Cancelled'];
 
   @override
   void initState() {
@@ -239,11 +250,16 @@ class _AdminOrderCard extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(20),
                   ),
                 child: DropdownButton<String>(
-                  value: currentStatus,
+                  // A status outside the known set (legacy row, or a direct API
+                  // write) would otherwise trip the dropdown's assertion and
+                  // crash the whole order list.
+                  value: _kOrderStatuses.contains(currentStatus)
+                      ? currentStatus
+                      : null,
                   isDense: true,
                   underline: const SizedBox.shrink(),
                   style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.w700),
-                  items: ['pending', 'confirmed', 'processing', 'packed', 'shipped', 'delivered', 'cancelled']
+                  items: _kOrderStatuses
                       .map((s) => DropdownMenuItem(value: s, child: Text(s.toUpperCase())))
                       .toList(),
                   onChanged: (newStatus) async {
@@ -536,7 +552,7 @@ class _AdminCustomersScreenState extends ConsumerState<AdminCustomersScreen> {
                               }
                             }
                           },
-                          activeColor: AppColors.success,
+                          activeThumbColor: AppColors.success,
                         ),
                 );
               },
@@ -848,7 +864,7 @@ class AdminCouponsScreen extends ConsumerWidget {
                         await ref.read(dioProvider).patch('/coupons/${data['id']}', data: {'isActive': v});
                         ref.invalidate(adminCouponsProvider);
                       },
-                      activeColor: AppColors.primary,
+                      activeThumbColor: AppColors.primary,
                     ),
                   ),
                 );
@@ -876,7 +892,7 @@ class AdminCouponsScreen extends ConsumerWidget {
                   textCapitalization: TextCapitalization.characters),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: type,
+                initialValue: type,
                 decoration: const InputDecoration(labelText: 'Type'),
                 items: const [
                   DropdownMenuItem(value: 'percentage', child: Text('Percentage (%)')),
@@ -952,7 +968,7 @@ class AdminBannersScreen extends ConsumerWidget {
                         await ref.read(dioProvider).patch('/banners/${data['id']}', data: {'isActive': v});
                         ref.invalidate(adminBannersProvider);
                       },
-                      activeColor: AppColors.primary,
+                      activeThumbColor: AppColors.primary,
                     ),
                   ),
                 );

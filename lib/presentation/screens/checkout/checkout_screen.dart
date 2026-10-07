@@ -119,14 +119,24 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     }
   }
 
-  double get _standardDeliveryFee =>
-      (_quote?['deliveryFee'] as num?)?.toDouble() ??
-      ref.read(cartProvider).shippingFee;
+  double get _standardDeliveryFee {
+    // A free_shipping coupon zeroes delivery server-side, so the displayed fee
+    // has to agree or the customer reviews a total we never charge.
+    if (ref.read(cartProvider).couponType == 'free_shipping') return 0;
+    return (_quote?['deliveryFee'] as num?)?.toDouble() ??
+        ref.read(cartProvider).shippingFee;
+  }
+
   double get _expressDeliveryFee =>
       (_quote?['expressSurcharge'] as num?)?.toDouble() ??
       AppConstants.expressShippingFee;
+
+  /// Express is a premium ON TOP of the distance fee, which is what the "+₹199"
+  /// label promises and what the server now charges. It used to replace it here,
+  /// so the two disagreed.
   double get _deliveryFee =>
-      _delivery == 'express' ? _expressDeliveryFee : _standardDeliveryFee;
+      _standardDeliveryFee +
+      (_delivery == 'express' ? _expressDeliveryFee : 0);
   String? get _deliveryLabel => _quote?['label']?.toString();
   bool get _deliverable => _quote == null || _quote!['deliverable'] != false;
 
@@ -208,6 +218,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           'pinCode': _pincodeCtrl.text,
         },
         'paymentMethod': _payment,
+        // Without this the server never sees the express choice, so the customer
+        // was shown the surcharge and charged the standard fee.
+        'shippingMethod': _delivery,
         'couponCode': cart.couponCode,
         'totalAmount': grandTotal,
       });
@@ -676,7 +689,7 @@ class _Step2Address extends StatelessWidget {
                       Switch.adaptive(
                         value: saveToProfile,
                         onChanged: onSaveToProfileChanged,
-                        activeColor: AppColors.primary,
+                        activeTrackColor: AppColors.primary,
                       ),
                     ],
                   ),
@@ -952,16 +965,29 @@ class _Step4Payment extends StatelessWidget {
         const Text('Payment Method',
             style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
         const SizedBox(height: 16),
-        ..._methods.map((m) => RadioListTile<String>(
-              value: m.$1,
-              groupValue: selected,
-              onChanged: (v) => onChanged(v!),
-              title: Text(m.$2),
-              secondary: Icon(m.$3, color: AppColors.primary),
-              activeColor: AppColors.primary,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            )),
+        // RadioListTile's own groupValue/onChanged are deprecated in favour of a
+        // RadioGroup ancestor. The group wraps only the tiles, so the COD banner
+        // below stays outside it.
+        RadioGroup<String>(
+          groupValue: selected,
+          // RadioGroup hands back a nullable value, so guard rather than
+          // reinstating the old `v!` bang.
+          onChanged: (v) {
+            if (v != null) onChanged(v);
+          },
+          child: Column(
+            children: [
+              ..._methods.map((m) => RadioListTile<String>(
+                    value: m.$1,
+                    title: Text(m.$2),
+                    secondary: Icon(m.$3, color: AppColors.primary),
+                    activeColor: AppColors.primary,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  )),
+            ],
+          ),
+        ),
         if (selected == AppConstants.paymentCod)
             Container(
               margin: const EdgeInsets.only(top: 8),

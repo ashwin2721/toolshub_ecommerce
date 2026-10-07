@@ -99,6 +99,13 @@ class CartNotifier extends StateNotifier<CartEntity> {
   }
 
   Future<void> addItem(ProductEntity product, {int quantity = 1}) async {
+    // Externally-fulfilled products are bought on the partner's store. We
+    // control neither their stock nor their price, so they must never enter a
+    // cart or an order here - the storefront shows a "Buy on <store>" link
+    // instead. This is the backstop for every call site, present and future;
+    // the server refuses them too.
+    if (product.isExternalLink) return;
+
     // Cap to the lesser of the cart limit and what's actually in stock so we
     // never hold quantities that cannot be fulfilled at checkout.
     final maxAllowed = product.stockQuantity < AppConstants.maxCartQuantity

@@ -192,11 +192,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               error: (err, stack) => _HomeErrorState(
                 error: err,
                 onRetry: () {
+                  // Invalidating a family covers every instance of it, so these
+                  // three are enough. Two further ref.refresh calls used to sit
+                  // here and only made the retry button fire a duplicate request.
                   ref.invalidate(productsProvider);
                   ref.invalidate(categoriesProvider);
                   ref.invalidate(storeSettingsProvider);
-                  ref.refresh(productsProvider(const ProductFilter(limit: 60)));
-                  ref.refresh(categoriesProvider);
                 },
               ),
             ),

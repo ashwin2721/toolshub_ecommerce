@@ -5,6 +5,9 @@ version: 1.0.1+2
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
+  # activeThumbColor, DropdownButtonFormField.initialValue and RadioGroup all
+  # landed in Flutter 3.33; the code now uses them, so record the real floor.
+  flutter: ">=3.33.0"
 
 dependencies:
   flutter:

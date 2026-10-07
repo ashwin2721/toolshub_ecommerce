@@ -214,6 +214,8 @@ class AdminDashboardScreen extends ConsumerWidget {
                     children: [
                       _QuickAction(icon: Icons.add_box_outlined, label: 'Add Product',
                           color: AppColors.primary, onTap: () => context.go(AppRoutes.adminAddProduct)),
+                      _QuickAction(icon: Icons.category_outlined, label: 'Categories',
+                          color: AppColors.accentLight, onTap: () => context.go(AppRoutes.adminCategories)),
                       _QuickAction(icon: Icons.receipt_outlined, label: 'View Orders',
                           color: AppColors.info, onTap: () => context.go(AppRoutes.adminOrders)),
                       _QuickAction(icon: Icons.people_outline, label: 'Customers',

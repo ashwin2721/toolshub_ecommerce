@@ -41,5 +41,12 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Lets url_launcher see browsers and partner-store apps, so a product's
+             "Buy on Amazon" link can hand off to the Amazon app when installed.
+             Required under Android 11+ package visibility for canLaunchUrl. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
     </queries>
 </manifest>
